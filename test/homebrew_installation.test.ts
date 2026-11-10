@@ -3,7 +3,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { createAnalyticsCapture, fixtureInstallId } = require('./helpers/analytics.ts');
-const { isHomebrewInstallation, stateDirectory, readPackageMetadata, selectedPackageCommand, homebrewCommandOwner } = require('../commands/installation.ts');
+const { isHomebrewInstallation, stateDirectory, readPackageMetadata, selectedPackageCommand, homebrewCommandOwner, configurationFile, prepareConfigurationDirectory, packageFormula } = require('../commands/installation.ts');
 
 describe('Homebrew package boundary experiment', () => {
   let root: string;
@@ -117,6 +117,127 @@ describe('Homebrew package boundary experiment', () => {
       assert.throws(() => readPackageMetadata(first), 'Invalid Ballin package provenance');
     }
 
+  });
+  it('rejects unsupported ownership and each malformed provenance field in the source module', () => {
+    const marker = path.join(first, '.ballin-package.json');
+    for (const value of [null, {}, { manager: 'git', schema: 1 }, { manager: 'homebrew', schema: 3 }]) {
+      fs.writeFileSync(marker, JSON.stringify(value));
+      assert.throws(() => readPackageMetadata(first), 'Unsupported Ballin package ownership');
+    }
+    for (const patch of [
+      { version: '01.0.0' }, { sourceRevision: 'bad' }, { archiveSha256: 'bad' },
+      { formula: '../ballin' }, { selection: undefined }, { commandPath: 42 },
+      { commandPath: 'relative/bin/ballin' }, { commandPath: '/bad\nballin' },
+      { completionRoot: null }, { completionRoot: 'relative/completions' }, { completionRoot: '/bad\0completions' },
+    ]) {
+      fs.writeFileSync(marker, JSON.stringify({ ...receipt(first), ...patch }));
+      assert.throws(() => readPackageMetadata(first), 'Invalid Ballin package provenance');
+    }
+    fs.unlinkSync(marker);
+    fs.mkdirSync(marker);
+    assert.throws(() => readPackageMetadata(first), 'Unable to verify Ballin package ownership');
+  });
+  it('prepares only the selected package state directory under an isolated home', () => {
+    const homedir = os.homedir;
+    os.homedir = () => home;
+    try {
+      const file = path.join(home, '.ballin/ballin.config.json');
+      assert.equal(stateDirectory(first), path.dirname(file));
+      assert.equal(configurationFile(first), file);
+      const unrelated = path.join(root, 'unrelated/ballin.config.json');
+      prepareConfigurationDirectory(unrelated, first);
+      assert.isFalse(fs.existsSync(path.dirname(unrelated)));
+      prepareConfigurationDirectory(file, first);
+      assert.isTrue(fs.statSync(path.dirname(file)).isDirectory());
+      assert.equal(fs.statSync(path.dirname(file)).mode & 0o777, 0o700);
+      assert.isFalse(fs.existsSync(file));
+      prepareConfigurationDirectory(file, first);
+      prepareConfigurationDirectory(unrelated, root);
+      assert.isFalse(fs.existsSync(path.dirname(unrelated)));
+      assert.equal(configurationFile(root), path.join(root, 'ballin.config.json'));
+      assert.isFalse(fs.existsSync(path.join(first, 'ballin.config.json')));
+    } finally { os.homedir = homedir; }
+  });
+  it('selects the default or recorded formula without writing a source marker', () => {
+    const readFileSync = fs.readFileSync;
+    const marker = path.join(source, '.ballin-package.json');
+    assert.equal(packageFormula(), 'ballin');
+    try {
+      for (const formula of [undefined, 'owner/tap/ballin-experiment']) {
+        fs.readFileSync = (file: string, ...args: unknown[]) => file === marker
+          ? JSON.stringify({ manager: 'homebrew', schema: 1, formula }) : readFileSync(file, ...args);
+        assert.equal(packageFormula(), formula ?? 'ballin');
+      }
+    } finally { fs.readFileSync = readFileSync; }
+    assert.isFalse(fs.existsSync(marker));
+  });
+  it('recognizes libexec ownership while distinguishing absent and broken commands', () => {
+    assert.isFalse(homebrewCommandOwner(path.join(root, 'missing')));
+    const dangling = path.join(root, 'dangling');
+    fs.symlinkSync('missing', dangling);
+    assert.isFalse(homebrewCommandOwner(dangling));
+    const prefix = path.join(root, 'wrapper');
+    fs.mkdirSync(path.join(prefix, 'bin'), { recursive: true });
+    const command = path.join(prefix, 'bin/ballin');
+    fs.writeFileSync(command, 'never execute');
+    assert.isFalse(homebrewCommandOwner(command));
+    fs.mkdirSync(path.join(prefix, 'libexec'));
+    fs.writeFileSync(path.join(prefix, 'libexec/.ballin-package.json'), JSON.stringify({ manager: 'homebrew', schema: 1 }));
+    assert.isTrue(homebrewCommandOwner(command));
+    const realpathSync = fs.realpathSync;
+    const denied = Object.assign(new Error('fixture denied'), { code: 'EACCES' });
+    try {
+      fs.realpathSync = (file: string) => { if (file === command) throw denied; return realpathSync(file); };
+      assert.throws(() => homebrewCommandOwner(command), 'fixture denied');
+    } finally { fs.realpathSync = realpathSync; }
+  });
+  it('checks legacy ownership, unusable PATH entries, wrappers and retired versions without execution', () => {
+    assert.isUndefined(selectedPackageCommand(root, {}));
+    assert.equal(selectedPackageCommand(first, {}).status, 'warn');
+    const marker = path.join(first, '.ballin-package.json');
+    fs.writeFileSync(marker, JSON.stringify(receipt(first)));
+    const unusable = path.join(root, 'unusable');
+    fs.mkdirSync(path.join(unusable, 'ballin'), { recursive: true });
+    assert.equal(selectedPackageCommand(first, { PATH: unusable }).status, 'fail');
+    fs.rmdirSync(path.join(unusable, 'ballin'));
+    fs.writeFileSync(path.join(unusable, 'ballin'), 'never execute', { mode: 0o600 });
+    assert.equal(selectedPackageCommand(first, { PATH: unusable }).status, 'fail');
+    const wrapper = path.join(root, 'wrapper');
+    fs.mkdirSync(path.join(wrapper, 'bin'), { recursive: true });
+    const command = path.join(wrapper, 'bin/ballin');
+    fs.writeFileSync(command, 'never execute', { mode: 0o755 });
+    fs.symlinkSync(first, path.join(wrapper, 'libexec'));
+    fs.writeFileSync(marker, JSON.stringify({ ...receipt(first), commandPath: command }));
+    assert.equal(selectedPackageCommand(first, { PATH: path.dirname(command) }).status, 'pass');
+    fs.unlinkSync(path.join(wrapper, 'libexec'));
+    fs.mkdirSync(path.join(wrapper, 'libexec'));
+    assert.include(selectedPackageCommand(first, { PATH: path.dirname(command) }).summary, 'another version');
+    fs.unlinkSync(command);
+    assert.include(selectedPackageCommand(first, { PATH: path.join(first, 'bin') }).summary, 'cannot be resolved');
+  });
+  it('collects only explicit package preferences using the original snapshot source', () => {
+    const { observeSnapshotSources } = require('../commands/backup_snapshots.ts');
+    const preferences = path.join(home, '.ballin/ballin.config.json');
+    fs.mkdirSync(path.dirname(preferences));
+    fs.mkdirSync(path.join(home, '.ballin-scripts'));
+    fs.writeFileSync(path.join(home, '.ballin-scripts/ballin.config.json'), JSON.stringify({ update: { cleanup: 'true' } }));
+    fs.writeFileSync(preferences, JSON.stringify({ update: { cleanup: 'false' }, custom: { token: 'PRIVATE_FIXTURE' } }));
+    const env = { HOME: home, PATH: '', BALLIN_NO_COMMAND_ANALYTICS: '1' };
+    const observe = () => observeSnapshotSources({ homeDir: home, env, configPath: preferences }, false)
+      .find((item: { definition: { name: string } }) => item.definition.name === 'ballin_config');
+    const snapshot = observe();
+    assert.equal(snapshot.status, 'available');
+    assert.equal(snapshot.source.path, preferences);
+    const result = spawnSync(snapshot.collector.command, snapshot.collector.args, {
+      cwd: snapshot.collector.cwd, env: snapshot.collector.env, encoding: 'utf8', timeout: 15000,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { update: { cleanup: 'false' } });
+    assert.notInclude(result.stdout, 'PRIVATE_FIXTURE');
+    fs.unlinkSync(preferences);
+    assert.equal(observe().status, 'absent');
+    fs.mkdirSync(preferences);
+    assert.equal(observe().status, 'unavailable');
   });
   it('refuses Git relinking over package commands and refuses package use of Git link setup', () => {
     const git = path.join(root, 'git'); fs.mkdirSync(path.join(git, 'bin'), { recursive: true });

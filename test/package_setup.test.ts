@@ -2,23 +2,39 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { createPackageSourceFixture } = require('./helpers/package_source.ts');
+const { fixtureDestination, fixtureState, installRepositoryFixture } = require('./helpers/repository.ts');
 
-describe('explicit Homebrew initial setup', () => {
+for (const layout of ['copied keg', 'source modules']) describe(`explicit Homebrew initial setup (${layout})`, () => {
   let root: string;
   let home: string;
   let repo: string;
   let file: string;
   let tools: string;
+  let markerPath: string;
+  let packageEnv: NodeJS.ProcessEnv;
   const run = (input = '', args = ['setup', '--initial']) => spawnSync(process.execPath, [path.join(repo, 'bin/ballin'), ...args], {
     input, encoding: 'utf8', timeout: 15000,
-    env: { HOME: home, PATH: tools, NO_COLOR: '1', TERM: 'dumb', BALLIN_NO_COMMAND_ANALYTICS: '1' },
+    env: { HOME: home, PATH: tools, NO_COLOR: '1', TERM: 'dumb', BALLIN_NO_ANALYTICS: '1', ...packageEnv },
   });
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-package-setup-'));
-    home = path.join(root, 'home'); repo = path.join(root, 'keg'); tools = path.join(root, 'tools');
-    for (const dir of [home, repo, tools]) fs.mkdirSync(dir);
-    for (const entry of ['commands', 'config', 'bin', 'package.json']) fs.cpSync(path.join(__dirname, '..', entry), path.join(repo, entry), { recursive: true });
-    fs.writeFileSync(path.join(repo, '.ballin-package.json'), JSON.stringify({ manager: 'homebrew', schema: 2, formula: 'ballin-experiment', version: require('../package.json').version, sourceRevision: 'a'.repeat(40), archiveSha256: 'b'.repeat(64), selection: { kind: 'development' }, commandPath: path.join(tools, 'ballin'), completionRoot: path.join(repo, 'completions') }));
+    home = path.join(root, 'home'); tools = path.join(root, 'tools');
+    for (const dir of [home, tools]) fs.mkdirSync(dir);
+    const source = path.join(__dirname, '..');
+    packageEnv = {};
+    if (layout === 'copied keg') {
+      repo = path.join(root, 'keg');
+      fs.mkdirSync(repo);
+      for (const entry of ['commands', 'config', 'bin', 'package.json']) fs.cpSync(path.join(source, entry), path.join(repo, entry), { recursive: true });
+      markerPath = path.join(repo, '.ballin-package.json');
+    } else {
+      repo = source;
+      const fixture = createPackageSourceFixture(root, repo);
+      markerPath = fixture.markerPath;
+      packageEnv = fixture.env;
+    }
+    fs.writeFileSync(markerPath, JSON.stringify({ manager: 'homebrew', schema: 2, formula: 'ballin-experiment', version: require('../package.json').version, sourceRevision: 'a'.repeat(40), archiveSha256: 'b'.repeat(64), selection: { kind: 'development' }, commandPath: path.join(tools, 'ballin'), completionRoot: path.join(repo, 'completions') }));
     fs.symlinkSync(process.execPath, path.join(tools, 'node'));
     for (const name of ['gh', 'git']) fs.writeFileSync(path.join(tools, name), `#!/bin/sh\nprintf '${name}\\n' >> '${root}/unexpected'\nexit 99\n`, { mode: 0o755 });
     fs.writeFileSync(path.join(home, '.zshrc'), 'keep startup\n');
@@ -91,6 +107,47 @@ describe('explicit Homebrew initial setup', () => {
     assert.include(retry.stdout, 'Initial setup complete');
     assertUntouched();
   });
+  it('cancels optional backup before authentication without entering preferences', () => {
+    const result = run('y\n');
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.include(result.stdout, 'Backup setup cancelled');
+    assert.include(result.stdout, 'Initial setup cancelled');
+    assert.notInclude(result.stdout, 'Review your Ballin preferences?');
+    assertUntouched();
+  });
+  it('validates an existing fixture backup and continues to preference consent', () => {
+    assert.equal(run('n\nn\n').status, 0);
+    const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+    config.backup = { repository: fixtureDestination, includeSensitive: 'false' };
+    fs.writeFileSync(file, JSON.stringify(config));
+    const statePath = path.join(root, 'repository.json');
+    fs.writeFileSync(statePath, JSON.stringify(fixtureState()));
+    installRepositoryFixture(tools, statePath);
+    const result = run('y\nn\n');
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.include(result.stdout, 'Review your Ballin preferences?');
+    assert.include(result.stdout, 'Initial setup complete');
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')).backup.repository, fixtureDestination);
+    assertUntouched();
+  });
+  it('reports a preference save failure without completing setup or losing saved config', () => {
+    const preload = path.join(root, 'deny-preference-write.cjs');
+    fs.writeFileSync(preload, `
+const fs = require('fs');
+const rename = fs.renameSync;
+fs.renameSync = (from, to, ...args) => {
+  if (to === ${JSON.stringify(path.join(fs.realpathSync(home), '.ballin/ballin.config.json'))}) throw Object.assign(new Error('fixture write denied'), { code: 'EACCES' });
+  return rename.call(fs, from, to, ...args);
+};
+`);
+    packageEnv.NODE_OPTIONS = `${packageEnv.NODE_OPTIONS ?? ''} --require ${JSON.stringify(preload)}`.trim();
+    const result = run('n\ny\ny\n');
+    assert.equal(result.status, 1, result.stderr + result.stdout);
+    assert.include(result.stderr, 'Unable to complete preference review');
+    assert.notInclude(result.stdout, 'Initial setup complete');
+    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).update.npm, 'false');
+    assertUntouched();
+  });
   it('rejects shadowed package commands before creating configuration', () => {
     const shadow = path.join(root, 'shadow'); fs.mkdirSync(shadow);
     fs.writeFileSync(path.join(shadow, 'ballin'), '#!/bin/sh\nexit 99\n', { mode: 0o755 });
@@ -104,7 +161,7 @@ describe('explicit Homebrew initial setup', () => {
     assertUntouched();
   });
   it('requires current ownership metadata for initial onboarding', () => {
-    fs.writeFileSync(path.join(repo, '.ballin-package.json'), JSON.stringify({ manager: 'homebrew', schema: 1 }));
+    fs.writeFileSync(markerPath, JSON.stringify({ manager: 'homebrew', schema: 1 }));
     const result = run();
     assert.equal(result.status, 1);
     assert.include(result.stderr, 'legacy package metadata');
@@ -112,7 +169,7 @@ describe('explicit Homebrew initial setup', () => {
     assertUntouched();
   });
   it('rejects Git installs before creating configuration', () => {
-    fs.unlinkSync(path.join(repo, '.ballin-package.json'));
+    fs.unlinkSync(markerPath);
     const result = run('n\nn\n');
     assert.equal(result.status, 1);
     assert.include(result.stderr, 'only for Homebrew installations');
