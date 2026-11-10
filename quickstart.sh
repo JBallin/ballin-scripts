@@ -631,6 +631,20 @@ validate_nvm_directory() {
   physical=$(cd -P -- "$ancestor" && pwd -P) || fail 'Unable to resolve the NVM working directory.'
   case "$physical$suffix/" in */Cellar/*) fail 'NVM_DIR must be a user-owned directory outside Homebrew Cellar.' ;; esac
 }
+# Claim every missing component exclusively after consent. Never adopt a path
+# that appeared after validation, including below a sticky shared ancestor.
+prepare_nvm_directory() {
+  local ancestor="$nvm_directory" index
+  local missing=()
+  while [[ ! -e "$ancestor" && ! -L "$ancestor" ]]; do
+    missing+=("$ancestor"); ancestor=${ancestor%/*}; ancestor=${ancestor:-/}
+  done
+  validate_nvm_directory
+  for (( index=${#missing[@]}-1; index>=0; index-- )); do
+    mkdir -m 700 -- "${missing[index]}" || fail 'The NVM path changed or could not be created safely. Inspect it before retrying Quickstart.'
+  done
+  validate_nvm_directory
+}
 validate_nvm_alias_targets() {
   local entry links
   for entry in "$nvm_directory/alias" "$nvm_directory/alias/lts"; do
@@ -891,11 +905,13 @@ install_nvm_lts() {
       nvm_source="$brew_prefix/opt/nvm/libexec/nvm.sh"; nvm_method=homebrew
       [[ -r "$nvm_source" ]] || fail 'Homebrew NVM source was not installed at its stable prefix.'
     else
-      mkdir -p "$nvm_directory"
+      prepare_nvm_directory
       download 'https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh' "$scratch/nvm-install.sh"
       if [[ ! -s "$scratch/nvm-install.sh" ]] || ! /bin/bash -n "$scratch/nvm-install.sh"; then
         fail 'The official NVM installer is empty or incomplete.'
       fi
+      validate_nvm_directory
+      validate_nvm_alias_targets
       printf '$ PROFILE=/dev/null NVM_DIR=%q bash %q\n' "$nvm_directory" "$scratch/nvm-install.sh"
       # NVM installer overrides must not redirect the promised source or install
       # an inherited NODE_VERSION. Keep unrelated caller/auth environment intact.
@@ -907,7 +923,7 @@ install_nvm_lts() {
   if [[ "$nvm_method" == homebrew ]]; then
     # Initialize fresh and discovered Homebrew installations only after consent.
     # Preserve every existing entry, including dangling links and directories.
-    mkdir -p "$nvm_directory"
+    prepare_nvm_directory
     if [[ ! -e "$nvm_directory/nvm.sh" && ! -L "$nvm_directory/nvm.sh" ]]; then
       ln -s "$nvm_source" "$nvm_directory/nvm.sh"
     fi

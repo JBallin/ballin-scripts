@@ -767,6 +767,70 @@ esac
       assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
     });
   }
+  it('revalidates the claimed NVM directory after downloading the installer', () => {
+    const target = path.join(home, '.nvm');
+    const curl = path.join(tools, 'curl');
+    const original = fs.readFileSync(curl, 'utf8');
+    const needle = 'cp "$FAKE_ROOT/nvm-install.sh" "$target" ;;';
+    assert.include(original, needle);
+    fs.unlinkSync(curl);
+    fs.writeFileSync(curl, original.replace(needle, 'cp "$FAKE_ROOT/nvm-install.sh" "$target"; chmod 777 "$NVM_DIR" ;;'), { mode: 0o700 });
+    const installer = path.join(root, 'nvm-install.sh');
+    fs.writeFileSync(installer, fs.readFileSync(installer, 'utf8').replace('set -eu', 'set -eu\ntouch "$FAKE_ROOT/race-installer-entered"'));
+    const result = run('y\ny\ny\n', { NVM_DIR: target, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'y\n' });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'not trusted');
+    assert.isFalse(fs.existsSync(path.join(root, 'race-installer-entered')));
+    assert.notInclude(readLog(), 'nvm:install:');
+  });
+  for (const route of ['direct', 'homebrew']) for (const existing of [false, true]) {
+    it(`supports protected NVM paths below sticky ancestors (${route}, existing: ${existing})`, () => {
+      const parent = path.join(root, 'shared'); fs.mkdirSync(parent); fs.chmodSync(parent, 0o1777);
+      const target = path.join(parent, 'private/nvm');
+      if (existing) fs.mkdirSync(target, { recursive: true, mode: 0o700 });
+      const prefix = route === 'homebrew' ? nativeBrew() : '';
+      const result = run('y\ny\ny\n', { NVM_DIR: target, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'y\n',
+        ...(prefix ? { PATH: `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix } : {}) });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.include(readLog(), 'nvm:install:--lts');
+      assert.equal(fs.statSync(target).mode & 0o777, 0o700);
+      assert.equal(fs.statSync(path.dirname(target)).mode & 0o777, 0o700);
+    });
+  }
+  for (const route of ['direct', 'homebrew']) for (const collision of ['final', 'ancestor link']) {
+    it(`refuses a raced missing NVM ${collision} on the ${route} route before writes or execution`, () => {
+      const parent = path.join(root, 'shared'); fs.mkdirSync(parent); fs.chmodSync(parent, 0o1777);
+      const outside = path.join(root, 'peer'); fs.mkdirSync(outside);
+      const target = path.join(parent, collision === 'final' ? 'nvm' : 'missing/nvm');
+      const raced = collision === 'final' ? target : path.dirname(target);
+      fs.unlinkSync(path.join(tools, 'mkdir'));
+      fs.writeFileSync(path.join(tools, 'mkdir'), `#!/bin/bash
+last=\${!#}
+if [[ ( "$last" == "$FAKE_RACE_TARGET" || "$last" == "$FAKE_RACE_PARENT" ) && ! -e "$FAKE_ROOT/raced" ]]; then
+  /usr/bin/touch "$FAKE_ROOT/raced"
+  if [[ "$FAKE_RACE_KIND" == final ]]; then
+    /bin/mkdir -p "$FAKE_RACE_TARGET/.git/hooks"
+    /usr/bin/touch "$FAKE_RACE_TARGET/.git/hooks/post-checkout"
+  else
+    /bin/ln -s "$FAKE_RACE_OUTSIDE" "$FAKE_RACE_PARENT"
+  fi
+fi
+exec /bin/mkdir "$@"
+`, { mode: 0o700 });
+      const installer = path.join(root, 'nvm-install.sh');
+      fs.writeFileSync(installer, fs.readFileSync(installer, 'utf8').replace('set -eu', 'set -eu\ntouch "$FAKE_ROOT/race-installer-entered"'));
+      const prefix = route === 'homebrew' ? nativeBrew() : '';
+      const result = run('y\ny\ny\n', { NVM_DIR: target, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'y\n',
+        FAKE_RACE_TARGET: target, FAKE_RACE_PARENT: raced, FAKE_RACE_KIND: collision,
+        FAKE_RACE_OUTSIDE: outside, ...(prefix ? { PATH: `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix } : {}) });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.isTrue(fs.existsSync(path.join(root, 'raced')));
+      assert.isFalse(fs.existsSync(path.join(root, 'race-installer-entered')));
+      assert.deepEqual(fs.readdirSync(outside), []);
+      assert.notInclude(readLog(), 'nvm:install:');
+      assert.isFalse(fs.existsSync(path.join(home, '.ballin-scripts')));
+    });
+  }
   it('remediates incompatible Node only after consent and retains the older command', () => {
     const active = path.join(tools, 'node'); fs.unlinkSync(active);
     const old = '#!/bin/sh\nprintf "false\\n"\n'; fs.writeFileSync(active, old, { mode: 0o700 });
