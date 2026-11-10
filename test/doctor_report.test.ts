@@ -78,3 +78,18 @@ describe('doctor literal recovery guidance', () => {
     });
   }
 });
+
+describe('doctor checks without specific recovery instructions', () => {
+  for (const status of ['warn', 'fail']) {
+    it(`retains an unfamiliar ${status} check and supplies non-destructive fallback guidance`, () => {
+      const report = { status, checks: [{ id: 'future.check', label: 'Future check', status, summary: 'Inspect this condition.' }] };
+      const before = JSON.stringify(report);
+      for (const output of [formatDefaultDoctorReport(report), formatVerboseDoctorReport(report)]) {
+        assert.include(output, 'Future check: Inspect this condition.');
+        assert.include(output, 'Next: Review the check output above.');
+        assert.notInclude(output, 'reset');
+      }
+      assert.equal(JSON.stringify(report), before);
+    });
+  }
+});
