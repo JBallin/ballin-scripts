@@ -1160,7 +1160,7 @@ describe('repository backup lifecycle', function() {
       fs.writeFileSync(path.join(claude, 'CLAUDE.md'), '@../outside.md\nDUMMY_SELECTED_SECRET\n');
       fs.writeFileSync(path.join(claude, 'rules', 'nested', 'fixture.md'), 'synthetic rule\n');
       fs.writeFileSync(path.join(claude, 'rules', 'ignored.json'), 'DUMMY_EXCLUDED_SECRET');
-      fs.writeFileSync(path.join(claude, 'settings.json'), 'DUMMY_SETTINGS_SECRET');
+      fs.writeFileSync(path.join(claude, 'settings.json'), JSON.stringify({ env: { TOKEN: 'DUMMY_SETTINGS_SECRET' } }));
       fs.mkdirSync(path.join(claude, 'skills', 'demo'), { recursive: true });
       fs.writeFileSync(path.join(claude, 'skills', 'SKILL.md'), 'DUMMY_SKILL_SECRET');
       fs.writeFileSync(path.join(claude, 'skills', 'demo', 'SKILL.md'), 'personal skill');
@@ -1204,6 +1204,132 @@ describe('repository backup lifecycle', function() {
       const repeated = run([], '', { CLAUDE_CONFIG_DIR: claude }); ok(repeated);
       assert.notInclude(repeated.stdout, 'View changes:');
       assert.lengthOf(publications(), 1);
+    });
+  });
+  describe('Claude preferences lifecycle', () => {
+    const snapshot = 'claude_preferences.json';
+    const settings = () => path.join(home, '.claude', 'settings.json');
+    const writeSettings = (contents: string): void => {
+      fs.mkdirSync(path.dirname(settings()), { recursive: true });
+      fs.writeFileSync(settings(), contents);
+    };
+
+    it('publishes only filtered preferences and reads them without applying local settings', () => {
+      const admitted = {
+        model: 'sonnet', effortLevel: 'high', theme: 'dark',
+        attribution: { commit: '', pr: 'Synthetic attribution' },
+        modelSettings: { sonnet: { effortLevel: 'medium' } },
+      };
+      writeSettings(JSON.stringify({
+        ...admitted,
+        env: { TOKEN: 'DUMMY_ENV_SECRET' }, hooks: { command: 'DUMMY_HOOK_SECRET' },
+        commands: ['DUMMY_COMMAND_SECRET'], permissions: { allow: ['DUMMY_PERMISSION_SECRET'] },
+        enabledPlugins: { DUMMY_PLUGIN_SECRET: true }, unknown: 'DUMMY_UNKNOWN_SECRET',
+      }));
+      const projectSettings = path.join(checkout, '.claude', 'settings.json');
+      fs.mkdirSync(path.dirname(projectSettings));
+      fs.writeFileSync(projectSettings, '{"model":"DUMMY_PROJECT_SECRET"}');
+      ok(run());
+      assert.deepEqual(JSON.parse(remote(snapshot)!), admitted);
+      assert.equal(cached(snapshot), remote(snapshot));
+      assert.notInclude(remote(snapshot), 'DUMMY_');
+      assert.lengthOf(publications(), 1);
+      const local = '{"model":"opus","env":{"TOKEN":"DUMMY_LOCAL_SECRET"}}';
+      writeSettings(local);
+      const read = run(['read', snapshot]); ok(read);
+      assert.equal(read.stdout, remote(snapshot));
+      assert.equal(fs.readFileSync(settings(), 'utf8'), local);
+      assert.equal(fs.readFileSync(projectSettings, 'utf8'), '{"model":"DUMMY_PROJECT_SECRET"}');
+      assert.lengthOf(publications(), 1);
+    });
+
+    for (const [kind, invalid] of [
+      ['malformed', '{"model":"DUMMY_PARSE_SECRET",'],
+      ['admitted-invalid', '{"effortLevel":"DUMMY_INVALID_SECRET"}'],
+    ]) {
+      it(`preserves remote snapshots and caches without publication for ${kind} preferences`, () => {
+        writeSettings('{"model":"sonnet"}'); source('old shell\n');
+        ok(run());
+        const previous = remote(snapshot);
+        const previousShell = remote('zshrc.sh');
+        const previousHead = state().head;
+        const previousStatus = fs.readFileSync(statusFile(), 'utf8');
+        writeSettings(invalid); source('new shell\n');
+        const failed = run();
+        assert.equal(failed.status, 1);
+        assert.include(failed.stderr, 'claude_preferences.json');
+        assert.notInclude(failed.stdout + failed.stderr, 'DUMMY_');
+        assert.equal(state().head, previousHead);
+        assert.lengthOf(publications(), 1);
+        assert.equal(remote(snapshot), previous); assert.equal(cached(snapshot), previous);
+        assert.equal(remote('zshrc.sh'), previousShell); assert.equal(cached(), previousShell);
+        assert.equal(fs.readFileSync(statusFile(), 'utf8'), previousStatus);
+      });
+    }
+
+    it('excludes source discovery and collection with sensitive consent off while retaining saved preferences', () => {
+      writeSettings('{"model":"sonnet"}'); ok(run());
+      const previous = remote(snapshot);
+      writeSettings('DUMMY_UNREADABLE_SECRET');
+      const value = config(); value.backup.includeSensitive = 'false'; saveConfig(value);
+      const attempts = path.join(root, 'settings-access.log');
+      const preload = `
+        const fs = require('fs'); const path = require('path');
+        for (const method of ['lstatSync', 'statSync', 'openSync', 'readFileSync']) {
+          const original = fs[method];
+          fs[method] = function(file, ...args) {
+            if (typeof file === 'string' && path.resolve(file) === ${JSON.stringify(fs.realpathSync(settings()))}) {
+              fs.appendFileSync(${JSON.stringify(attempts)}, method + '\\n');
+              throw new Error('DUMMY_EXCLUDED_ACCESS');
+            }
+            return original.call(this, file, ...args);
+          };
+        }
+        const cp = require('child_process'); const spawn = cp.spawnSync;
+        cp.spawnSync = function(command, args, ...rest) {
+          if (args?.some(arg => typeof arg === 'string' && arg.endsWith('/claude_preferences.ts'))) {
+            fs.appendFileSync(${JSON.stringify(attempts)}, 'collector\\n');
+            throw new Error('DUMMY_EXCLUDED_COLLECTOR');
+          }
+          return spawn.call(this, command, args, ...rest);
+        };
+      `;
+      const excluded = run([], '', {}, preload); ok(excluded);
+      assert.isFalse(fs.existsSync(attempts));
+      assert.equal(remote(snapshot), previous); assert.equal(cached(snapshot), previous);
+      assert.notInclude(excluded.stdout + excluded.stderr, 'DUMMY_');
+    });
+
+    it('reviews and discloses the settings path without reading preference bytes', () => {
+      unconfigured(); writeSettings('DUMMY_PREVIEW_SECRET');
+      const attempts = path.join(root, 'settings-read.log');
+      const preload = `
+        const fs = require('fs'); const path = require('path'); const fds = new Set();
+        const open = fs.openSync; const close = fs.closeSync;
+        fs.openSync = function(file, ...args) {
+          const fd = open.call(this, file, ...args);
+          if (typeof file === 'string' && path.resolve(file) === ${JSON.stringify(fs.realpathSync(settings()))}) fds.add(fd);
+          return fd;
+        };
+        fs.closeSync = function(fd) { fds.delete(fd); return close.call(this, fd); };
+        for (const method of ['readSync', 'readFileSync']) {
+          const original = fs[method];
+          fs[method] = function(file, ...args) {
+            if (fds.has(file) || (typeof file === 'string' && path.resolve(file) === ${JSON.stringify(fs.realpathSync(settings()))})) {
+              fs.appendFileSync(${JSON.stringify(attempts)}, method + '\\n');
+              throw new Error('DUMMY_PREVIEW_READ');
+            }
+            return original.call(this, file, ...args);
+          };
+        }
+      `;
+      const reviewed = run(['setup'], '\nreconnect\n\ny\nn\n', {}, preload);
+      assert.equal(reviewed.status, 1);
+      assert.include(reviewed.stdout, '~/.claude/settings.json');
+      assert.include(reviewed.stdout, 'Claude settings.json contributes selected preferences only; retained values may still be private.');
+      assert.notInclude(reviewed.stdout + reviewed.stderr, 'DUMMY_');
+      assert.isFalse(fs.existsSync(attempts));
+      assert.lengthOf(mutations(), 0);
     });
   });
   it('reviews selected Claude paths and Markdown readability without collecting contents', () => {

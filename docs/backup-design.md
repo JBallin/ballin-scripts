@@ -439,10 +439,14 @@ scope changes it can express. Increment `collectionPolicy` for a semantic
 collection change outside those declarations, such as new traversal or selection
 semantics. Do not increment it for implementation fixes that preserve the
 supported sources and selection policy, including bounded reading.
+The filtered Claude preferences addition advances `collectionPolicy` from 1 to 2
+for its projection semantics. Its top-level and nested allowlists live in the
+canonical scope data, so changes remain visible to the source-scope advisory.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
-30 sensitive sources, and one projected preferences snapshot.
+31 sensitive sources, and one projected Ballin preferences snapshot. The filtered
+Claude preferences snapshot belongs to `sensitive`, not `preferences`.
 `backup.includeSensitive` is the only local sensitive-source preference. Opting
 in covers the maintained sensitive catalog, including future supported sources;
 existing opt-ins therefore include Codex and Claude Code. Setup discloses this
@@ -470,6 +474,47 @@ unterminated. BOMs and Unicode bytes are preserved without normalization. Invali
 UTF-8 and content with non-text controls use Base64 string content. No timestamps,
 absolute paths or empty directories are stored. Source-specific generated exclusions and
 symlink rejection are documented in [source sensitivity](backup-sources.md#codex-configuration).
+
+### Claude preferences projection
+
+`claude_preferences.json` reads `settings.json` from nonempty `CLAUDE_CONFIG_DIR`,
+otherwise `HOME/.claude`. It uses the existing sensitive-source gate and Claude
+source traversal rules. Discovery and preview check attributes and readability,
+not settings contents. Excluded sensitive sources are not probed.
+
+Capture reconstructs a JSON object from the fixed allowlist documented in the
+[source guide](backup-sources.md#filtered-preferences). Each model's
+`modelSettings` object retains only `effortLevel` and `maxEffortLevel`;
+`attribution` retains only `false` or an object with `commit`/`pr` strings and a
+`sessionUrl` boolean. Unknown root and nested keys are omitted without
+schema-validating excluded values. Selected values require their supported types
+and enums; `model`, `language`, `outputStyle`, and `theme` accept arbitrary
+strings. Stable key ordering and one final newline make the output deterministic,
+without injected defaults. Empty objects and unknown-only input yield `{}` plus
+a newline, not an absent snapshot.
+
+Effort values are `low`, `medium`, `high`, or `xhigh`; a per-model effort cap also
+accepts `max`. Editor mode accepts `normal` or `vim`, and view mode accepts
+`default`, `verbose`, or `focus`. Model entries with no retained leaves are
+omitted. Duplicate admitted members, including escaped spellings and repeated
+model identifiers, fail rather than choosing one silently. Duplicates inside
+excluded objects do not affect the projection.
+
+Read the raw source with an independent 16 MiB bound before parsing strict UTF-8
+JSON. Require an object root. An empty file, malformed encoding or JSON, invalid selected value, duplicate
+selected key, or size overflow aborts the backup before publication or cache
+promotion, with value-free diagnostics. Filtered output consumes the shared
+Claude 16 MiB staged-byte budget; a small projection does not waive the raw-read
+bound. Existing saved-snapshot reads do not inspect live settings.
+
+This is a manual-reference snapshot, never automatic application or a complete
+Claude backup. Raw settings, global `.claude.json`, project-local configuration,
+and referenced content remain outside this projection. Environment values,
+helpers, hooks of every type, commands, permissions, sandbox, MCP controls,
+plugins, marketplaces, and path settings are excluded. Separate Markdown and
+skill snapshots retain their existing content rules. Allowlisting is not secret
+scanning: admitted strings can contain sensitive content, and custom model/style
+names do not preserve their definitions or guarantee availability elsewhere.
 
 ### Bundle inspection
 
@@ -510,7 +555,7 @@ caches cannot establish a comparison base for new filenames.
 ### Capture bounds and traversal
 
 New Codex and Claude Code captures are each bounded to 16 MiB total normalized
-staged bytes per application (raw files and all archives, including unchanged
+staged bytes per application (raw files, filtered preferences, and all archives, including unchanged
 captures) and 8,192 visited entries per
 recursive source. Incremental iterative metadata traversal and opened-file
 bounded reads reject overflow without truncation. Text capture incrementally

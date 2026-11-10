@@ -63,6 +63,7 @@ const scopeSource = (value: unknown): boolean => {
     case 'configuration':
       return value.length === 8 && value.slice(0, 4).every(scopeString)
         && ['codex', 'claude'].includes(value[1]) && value.slice(4).every((flag) => typeof flag === 'boolean');
+    case 'claude-preferences': return value.length === 3 && value.every(scopeString);
     case 'bash-completions':
     case 'preferences': return value.length === 1;
     default: return false;
@@ -73,7 +74,12 @@ const validScope = (value: unknown): value is typeof import('./backup_scope.json
     || !Number.isSafeInteger(value.collectionPolicy) || value.collectionPolicy < 1
     || !Array.isArray(value.sources) || !value.sources.every(scopeSource)
     || !scopeStrings(value.portableUpdateKeys)) return false;
-  const { roots, recursive, preferences, bashCompletions } = value;
+  const { roots, recursive, preferences, bashCompletions, claudePreferences } = value;
+  // Older catalogs remain comparable before this source was introduced.
+  if (claudePreferences === undefined) {
+    if (value.sources.some((source) => source[0] === 'claude-preferences')) return false;
+  } else if (!scopeObject(claudePreferences)
+    || !['keys', 'attributionKeys', 'modelKeys'].every((key) => scopeStrings(claudePreferences[key]))) return false;
   return scopeObject(roots) && scopeStrings(roots.editor, 1)
     && scopeFields(roots, ['editorUser', 'codex', 'claude', 'codexEnvironment', 'claudeEnvironment'])
     && scopeObject(recursive)
@@ -96,6 +102,11 @@ const installedScope = (repoDir: string): string | undefined => {
     // Catalog order and set ordering do not change what can be collected.
     const sources = scope.sources.map(canonicalScope).sort();
     scope.portableUpdateKeys.sort();
+    if (scope.claudePreferences) {
+      scope.claudePreferences.keys.sort();
+      scope.claudePreferences.attributionKeys.sort();
+      scope.claudePreferences.modelKeys.sort();
+    }
     for (const key of ['excludedNames', 'claudeSyncBookkeeping', 'claudeExcludedRoots']) {
       scope.recursive[key as 'excludedNames' | 'claudeSyncBookkeeping' | 'claudeExcludedRoots'].sort();
     }

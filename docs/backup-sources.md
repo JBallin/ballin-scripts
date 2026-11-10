@@ -57,7 +57,7 @@ just to verify them.
 
 Consent covers later captures as files, symlink targets, and installed-tool
 metadata change. It does not certify future contents or require repeated review
-during unattended backups. Deliberately selected content remains intact without
+during unattended backups. Selected raw files and authoring content remain intact without
 redaction, subject to the existing final-newline and empty-file normalization;
 snapshots do not preserve filesystem bytes and metadata exactly. Known
 credential stores, authentication/session files, SSH private keys, and arbitrary
@@ -83,6 +83,7 @@ inspect editor files before enabling backup or sharing snapshots, check
 | `~/.agents/skills/` | `codex_user_skills.bundle.json` | Preserve current shared personal skills recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
 | Codex `skills/`, `rules/`, and `agents/` | `codex_skills.bundle.json`, `codex_rules.bundle.json`, `codex_agents.bundle.json` | Preserve legacy Codex-home skills and personal rules/agents recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
 | `~/.agents/plugins/marketplace.json` | `codex_marketplace.json` | Preserve the personal plugin marketplace definition. | Plugin references, private paths, URLs, and arbitrary manifest values. | Sensitive; the same local opt-in; referenced payloads excluded. |
+| Claude Code `settings.json` | `claude_preferences.json` | Keep selected model, interaction, and display preferences as a manual reference. | Custom model/style names, attribution text, and other selected strings may contain private information or secrets. | Sensitive; the same local opt-in; fixed filtered export, never raw settings. |
 | Claude Code `CLAUDE.md` | `claude_instructions` | Preserve personal instructions from the active configuration root. | Private instructions, credentials, paths, and imported-file references. | Sensitive; the same local opt-in; imports are not collected. |
 | Claude Code `rules/`, `agents/`, and legacy `commands/` | `claude_rules.bundle.json`, `claude_agents.bundle.json`, `claude_commands.bundle.json` | Preserve regular Markdown configuration recursively. | Private instructions, inline MCP values, permission modes, hook definitions, commands, and credentials. | Sensitive; the same local opt-in; referenced resources excluded. |
 | Claude Code `skills/` | `claude_skills.bundle.json` | Preserve complete eligible personal folders and plugin-origin synced packages, including hidden support, scripts, and binary assets. | Arbitrary instructions, credentials, executable files, private project information, and collection identifiers. | Sensitive; the same local opt-in; other synced origins, sync bookkeeping, plugin installations, and external references excluded. |
@@ -161,7 +162,8 @@ unknown groups remain excluded. See
 
 Ballin uses `CLAUDE_CONFIG_DIR` when nonempty, otherwise `~/.claude`. Relative
 root overrides resolve from the command's working directory; an explicitly
-selected root may be an alias. It selects `CLAUDE.md` and regular `.md`
+selected root may be an alias. It filters `settings.json` into the preferences
+snapshot described below, and selects `CLAUDE.md` and regular `.md`
 files beneath personal `rules/`, `agents/`, and legacy `commands/` directories.
 Personal and synced skills are selected separately as described below. A selected
 path identifies a supported configuration location, not proof of authorship or
@@ -181,23 +183,61 @@ Discovery or collection failure stops the backup before publication. Capture is
 not atomic across concurrent edits.
 
 Claude Code has its own **16 MiB combined** normalized capture allowance,
-including unchanged snapshots and archive/encoding overhead, plus **8,192 visited
+including filtered preferences, unchanged snapshots, and archive/encoding
+overhead, plus **8,192 visited
 entries** per directory source, counted before filtering. This preserves the
 existing Codex allowance, permitting up to 32 MiB combined staged assistant
 configuration. Limits stop the whole backup without truncation or partial
 publication; they do not bound historical remote reads or total process memory.
 
-Raw user settings and `.claude.json` are excluded. Settings mix preferences with
-environment values, credential helpers, permissions, sandbox exceptions, hooks,
-and plugin configuration; `.claude.json` mixes MCP definitions with sign-in and
-project trust state. Claude documents that `.claude.json` moves inside
+### Filtered preferences
+
+`claude_preferences.json` selects only these top-level keys from the active
+configuration root's `settings.json`:
+
+- `model`, `effortLevel`, `modelSettings`, `alwaysThinkingEnabled`
+- `language`, `outputStyle`, `attribution`, `editorMode`
+- `theme`, `verbose`, `viewMode`, `spinnerTipsEnabled`
+- `terminalProgressBarEnabled`, `showTurnDuration`, `prefersReducedMotion`
+
+Each `modelSettings` entry retains only `effortLevel` and `maxEffortLevel`.
+`attribution` may be `false` or an object containing only `commit` and `pr`
+strings and a `sessionUrl` boolean. Unknown root and nested keys are omitted.
+Model, language, output-style, and theme strings are preserved without a fixed
+name list; other selected values must meet their supported types and enums.
+No defaults are added. Custom names may identify private models or styles, and
+referenced custom definitions may be missing on another machine. Ballin does not
+collect referenced content or apply these preferences automatically. Use the
+snapshot as a manual reference, not a complete Claude Code backup.
+
+This projection uses the existing sensitive-source opt-in even though it is
+filtered. It is not secret scanning and does not promise secret-free output:
+selected strings, including attribution text, can contain sensitive information.
+
+A present settings file must be strict UTF-8 JSON with an object at its root.
+Empty files, invalid JSON, invalid selected values, or duplicate selected keys
+stop the whole backup before publication or cache promotion; diagnostics do not
+print source values.
+Excluded fields are not schema-validated. An empty object or one containing only
+unknown fields produces `{}` with a final newline rather than a missing
+snapshot. Output keys are deterministic. The raw settings read has a separate
+**16 MiB** bound, even if filtering would produce a small snapshot. The filtered
+output counts toward the shared Claude Code capture allowance above.
+
+Raw settings remain excluded. The projection omits environment values,
+credential helpers, hooks of every type, commands, permissions, sandbox
+exceptions, MCP controls, plugins, marketplaces, and path settings. Global
+`.claude.json` is also excluded: it mixes MCP definitions with sign-in and project
+trust state. Claude documents that `.claude.json` moves inside
 `CLAUDE_CONFIG_DIR` when set; neither location is selected. See
 [settings](https://code.claude.com/docs/en/settings) and
 [MCP locations](https://code.claude.com/docs/en/mcp-quickstart#find-your-configuration-on-disk).
-Plugin and marketplace intent needs a separate settings decision; fetched
-`plugins/` content is excluded. Hooks in excluded settings are not captured,
-while hooks embedded in selected agent Markdown remain intact. Ballin never
-executes definitions, follows external references, or restores approvals.
+Fetched `plugins/` content remains excluded. Hooks embedded in separately selected
+agent Markdown remain intact. Ballin never executes definitions, follows
+external references, or restores approvals. Project-local settings remain
+outside capture.
+
+### Personal and synced skills
 
 Personal skills capture immediate nonhidden folders in `skills/` that contain
 an exact-case regular `SKILL.md`. Their complete regular-file contents are

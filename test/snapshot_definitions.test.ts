@@ -90,6 +90,7 @@ const expectedDefinitions = [
   ['claude_agents.bundle.json', 'claude', [{ kind: 'directory', name: 'agents' }]],
   ['claude_commands.bundle.json', 'claude', [{ kind: 'directory', name: 'commands' }]],
   ['claude_skills.bundle.json', 'claude', [{ kind: 'directory', name: 'skills' }]],
+  ['claude_preferences.json', 'claude', [{ kind: 'file', name: 'settings.json' }]],
   [
     'ballin_config',
     'ballin',
@@ -129,7 +130,7 @@ describe('backup snapshot definitions', () => {
       )),
       expectedDefinitions,
     );
-    assert.equal(new Set(snapshotDefinitions.map(({ name }: SnapshotDefinition) => name)).size, 43);
+    assert.equal(new Set(snapshotDefinitions.map(({ name }: SnapshotDefinition) => name)).size, 44);
 
     assert.equal(configSnapshotFileName, 'ballin_config');
     assert.equal(repositoryReadmeFileName, 'README.md');
@@ -169,6 +170,7 @@ describe('backup snapshot definitions', () => {
         'codex_AGENTS.md', 'codex_AGENTS.override.md', 'codex_config.toml', 'codex_profiles.bundle.json', 'codex_hooks.json',
         'codex_skills.bundle.json', 'codex_user_skills.bundle.json', 'codex_rules.bundle.json', 'codex_agents.bundle.json', 'codex_marketplace.json',
         'claude_instructions', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json', 'claude_skills.bundle.json',
+        'claude_preferences.json',
       ],
       preferences: ['ballin_config'],
     };
@@ -192,9 +194,9 @@ describe('backup snapshot definitions', () => {
         definition.discover = () => { throw new Error('Excluded sources must never be inspected'); };
       });
       const result = observeSnapshotSources({ homeDir, env: { PATH: '' } }) as SnapshotSourceObservation[];
-      assert.lengthOf(result, 43);
+      assert.lengthOf(result, 44);
       const excluded = result.filter(({ status }) => status === 'excluded-by-policy');
-      assert.lengthOf(excluded, 30);
+      assert.lengthOf(excluded, 31);
       excluded.forEach((entry) => {
         assert.equal('reason' in entry && entry.reason, 'excluded-by-policy');
         assert.notProperty(entry, 'source');
@@ -230,7 +232,7 @@ describe('backup snapshot definitions', () => {
       ));
     });
     const selected = observations();
-    assert.lengthOf(selected, 43);
+    assert.lengthOf(selected, 44);
     assert.isFalse(selected.some(({ status }) => status === 'excluded-by-policy'));
   });
 
@@ -266,7 +268,7 @@ describe('backup snapshot definitions', () => {
         return originalAccess(candidate, mode);
       };
       const result: SnapshotSourceObservation[] = observeSnapshotSources({ homeDir, env: { PATH: binDir } });
-      assert.lengthOf(result.filter(({ status }) => status === 'excluded-by-policy'), 30);
+      assert.lengthOf(result.filter(({ status }) => status === 'excluded-by-policy'), 31);
       [...rawPaths, path.join(binDir, 'pipx')].forEach((excludedPath) => {
         assert.notInclude(statted, excludedPath);
         assert.notInclude(accessed, excludedPath);
@@ -336,7 +338,7 @@ describe('backup snapshot definitions', () => {
   it('returns one ordered observation even when every local source is absent or unavailable', () => {
     const result = observations();
 
-    assert.lengthOf(result, 43);
+    assert.lengthOf(result, 44);
     assert.deepEqual(result.map(({ definition }) => definition.name), expectedDefinitions.map(([name]) => name));
     assert.equal(observation('zshrc.sh').status, 'absent');
     assert.equal(observation('brew_list').status, 'unavailable');

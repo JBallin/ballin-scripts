@@ -39,9 +39,9 @@ describe('Claude Code selected configuration', () => {
   });
   afterEach(() => fs.rmSync(homeDir, { recursive: true, force: true }));
 
-  it('uses five canonical sensitive definitions and no implicit additional source', () => {
+  it('uses six canonical sensitive definitions and no implicit additional source', () => {
     const definitions = (snapshotDefinitions as SnapshotDefinition[]).filter(({ category }) => category === 'claude');
-    assert.deepEqual(definitions.map(({ name }) => name), ['claude_instructions', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json', 'claude_skills.bundle.json']);
+    assert.deepEqual(definitions.map(({ name }) => name), ['claude_instructions', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json', 'claude_skills.bundle.json', 'claude_preferences.json']);
     assert.deepEqual([...configurationSnapshotGroups].filter(([, category]) => category === 'claude').map(([name]) => name), definitions.map(({ name }) => name));
     definitions.forEach(({ inclusionGroup }) => assert.equal(inclusionGroup, 'sensitive'));
   });
@@ -132,10 +132,12 @@ describe('Claude Code selected configuration', () => {
     assert.equal(archive.entries[0].content.join(''), agent);
   });
 
-  it('does not select settings, runtime, plugins or project configuration', () => {
-    ['settings.json', '.claude.json', '.credentials.json', 'plugins/demo/rules/secret.md',
+  it('does not select raw settings, runtime, plugins or project configuration', () => {
+    ['.claude.json', '.credentials.json', 'plugins/demo/rules/secret.md',
       'projects/demo/memory/MEMORY.md', 'agent-memory/demo/MEMORY.md', 'history.jsonl'].forEach((relative) => write(relative, 'DUMMY_EXCLUDED_SECRET'));
     write('.claude.json', 'DUMMY_HOME_SECRET', homeDir);
+    write('settings.json', '{"env":{"SECRET":"DUMMY_EXCLUDED_SECRET"}}');
+    assert.equal(capture('claude_preferences.json').stdout, '{}\n');
     write('project/CLAUDE.md', 'project instructions', homeDir);
     write('project/.claude/rules/project.md', 'project rules', homeDir);
     ['claude_instructions', 'claude_rules.bundle.json', 'claude_agents.bundle.json', 'claude_commands.bundle.json', 'claude_skills.bundle.json'].forEach((name) => {
