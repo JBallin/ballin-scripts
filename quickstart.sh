@@ -19,7 +19,10 @@ ballin_download() {
   }
   case "$code" in
     200) return 0 ;;
-    404) ballin_error "No published release or supported revision was found: $1" ;;
+    404) ballin_error "No published release or supported revision was found: $1
+Check the requested version, branch, or commit and retry with an existing supported revision.
+See https://github.com/JBallin/ballin-scripts/releases for published stable versions.
+If no stable release is published yet, wait for publication; no fallback was selected." ;;
     401|403|429) ballin_error "GitHub authentication or rate limit rejected the request (HTTP $code). Retry later: $1" ;;
     *) ballin_error "GitHub request failed (HTTP $code): $1" ;;
   esac

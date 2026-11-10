@@ -144,7 +144,8 @@ const stderrCommand = (command: string): string => process.stderr.isTTY && proce
 class RevisionChangeCancelled extends Error {}
 class RevisionChangeRequiresConfirmation extends Error { status = 21; }
 const confirmTransition = (before: Identity, selection: Selection, mode: string): void => {
-  process.stdout.write(`Ballin: ${before.label} → ${selectionLabel(selection)}\n`);
+  const unchanged = before.sha === selection.sha && before.kind === selection.kind && before.value === selection.value;
+  process.stdout.write(unchanged ? `Ballin: ${selectionLabel(selection)} (unchanged)\n` : `Ballin: ${before.label} → ${selectionLabel(selection)}\n`);
   if (selection.kind === 'release') process.stdout.write(`Release notes: https://github.com/JBallin/ballin-scripts/releases/tag/${selection.value}\n`);
   if (!needsConsent(before, selection, mode)) return;
   if (process.env.BALLIN_AUTOMATIC_UPDATE === '1' || !require('node:tty').isatty(0)) {
