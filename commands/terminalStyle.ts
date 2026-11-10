@@ -118,7 +118,7 @@ const terminalDocumentation = (
   }
   const link = target && supportsHyperlinks(stream, env)
     ? `\x1b]8;;${target}\x1b\\${terminalColor(safeLabel, 34, stream, env)}\x1b]8;;\x1b\\`
-    : `${safeLabel}: ${display}`;
+    : `${safeLabel}: ${terminalColor(display, 34, stream, env)}`;
   return terminalMarkers('i ', stream, env) + link;
 };
 const visibleWidth = (text: string): number => {

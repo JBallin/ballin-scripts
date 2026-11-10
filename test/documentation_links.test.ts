@@ -32,6 +32,7 @@ describe('documentation link rendering', () => {
     assert.equal(stripAnsi(output), 'i Installation details: ' + guide);
     assert.notInclude(output, '\x1b]'); assert.notInclude(output, '\n');
     if (env.NO_COLOR || env.TERM === 'dumb') assert.notInclude(output, '\x1b');
+    else assert.include(output, '\x1b[34m' + guide + '\x1b[0m');
   });
   it('uses blue native labels with full HTTPS targets and no forced underline', () => {
     const output = terminalDocumentation('Installation details', guide, tty, capable);
@@ -114,7 +115,7 @@ describe('standalone documentation links on isolated PTYs', function() {
     it(`preserves ${file} supported, fallback and stream contracts (${mode})`, () => {
       sandbox = createSandbox();
       const source = fs.readFileSync(path.resolve(__dirname, '..', file), 'utf8');
-      const helpers = ['status_marker', 'supports_hyperlinks', 'documentation_pointer'].map((name) => {
+      const helpers = ['status_marker', 'url_reference', 'supports_hyperlinks', 'documentation_pointer'].map((name) => {
         const value = source.match(new RegExp('^' + name + '\\(\\) \\{\\n[\\s\\S]*?^\\}', 'mu'))?.[0];
         assert.isString(value); return value;
       }).join('\n');
@@ -137,7 +138,8 @@ printf 'ERR:' >&2; documentation_pointer 'Details' '${guide}' 2
       const supported = mode === 'supported' || mode === 'WezTerm';
       for (const prefix of ['OUT:', 'ERR:']) {
         if (supported) assert.include(output, prefix + '\x1b[0;34mi\x1b[0m ' + native('Details'));
-        else assert.include(stripAnsi(output), prefix + 'i Details: ' + guide + '\n');
+        else if (mode === 'NO_COLOR' || mode === 'dumb') assert.include(output, prefix + 'i Details: ' + guide + '\n');
+        else assert.include(output, prefix + '\x1b[0;34mi\x1b[0m Details: \x1b[34m' + guide + '\x1b[0m\n');
       }
       if (!supported) assert.notInclude(output, '\x1b]');
       if (mode === 'NO_COLOR' || mode === 'dumb') assert.notInclude(output, '\x1b');

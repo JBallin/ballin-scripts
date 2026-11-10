@@ -180,7 +180,7 @@ describe('repository backup lifecycle', function() {
       const target = 'getballin.com/docs/backup-design.html#normal-repository-resource-limits';
       const details = display === 'iTerm'
         ? '\x1b[0;34mi\x1b[0m \x1b]8;;https://' + target + '\x1b\\\x1b[34mDetails\x1b[0m\x1b]8;;\x1b\\'
-        : (display === 'unknown' ? '\x1b[0;34mi\x1b[0m' : 'i') + ' Details: ' + target;
+        : (display === 'unknown' ? '\x1b[0;34mi\x1b[0m Details: \x1b[34m' + target + '\x1b[0m' : 'i Details: ' + target);
       assert.include(result.stderr, 'No snapshots were published.\n' + details + '\n');
       assert.isBelow(result.stderr.indexOf('Stored data is retained.'), result.stderr.indexOf('No snapshots were published.'));
       assert.notInclude(result.stderr, '\x1b[4m');
@@ -2120,6 +2120,37 @@ describe('repository backup lifecycle', function() {
       assert.equal(mutations().length, 0); assert.isFalse(fs.existsSync(cacheRoot));
     });
   }
+  for (const [status, expected] of [[1, 0], [2, 2], [4, 4], [7, 7]]) {
+    it(`handles optional browser dispatch status ${status} after validating the destination`, () => {
+      const result = run(['open'], '', { BALLIN_BACKUP_OPEN_OPTIONAL_BROWSER: '1' }, `
+        const child = require('child_process'); const spawn = child.spawnSync;
+        child.spawnSync = function(command, args, options) {
+          if (command === 'gh' && args[0] === 'browse') return { status: ${status}, signal: null };
+          return spawn.call(this, command, args, options);
+        };
+      `);
+      assert.equal(result.status, expected, result.stdout + result.stderr);
+      assert.equal(result.stdout, '');
+      assert.include(result.stderr, 'Open https://github.com/fixture-user/ballin-backups manually.');
+      assert.lengthOf(mutations(), 0);
+    });
+  }
+  it('keeps destination authentication failure fatal when browser dispatch is optional', () => {
+    const value = state(); value.faults.auth = true; saveState(value);
+    const result = run(['open'], '', { BALLIN_BACKUP_OPEN_OPTIONAL_BROWSER: '1' });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'authentication');
+    assert.notInclude(result.stderr, 'unable to open your browser');
+    assert.isFalse(state().requests.some((request) => request.endpoint === 'open'));
+  });
+  it('keeps invalid configuration fatal when browser dispatch is optional', () => {
+    const value = config(); value.backup.repository.name = '../invalid'; saveConfig(value);
+    const result = run(['open'], '', { BALLIN_BACKUP_OPEN_OPTIONAL_BROWSER: '1' });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'invalid or conflicting destination configuration');
+    assert.notInclude(result.stderr, 'unable to open your browser');
+    assert.deepEqual(state().requests, []);
+  });
   it('does not erase validation diagnostics when replacing opening feedback', () => {
     const result = run(['open'], '', { TERM: 'xterm' }, browserOrderingPreload(true, true)); ok(result);
     assert.equal(result.stderr, 'Opening...\r\x1b[2Kfixture validation diagnostic\n');
@@ -2136,6 +2167,7 @@ describe('repository backup lifecycle', function() {
       const interrupted = status === 130 || status === 143;
       const effect = typeof browserResult === 'number' ? `process.exit(${browserResult});` : `process.kill(process.pid, '${browserResult}');`;
       const result = run(['open'], '', { ...capture.env,
+        ...(interrupted ? { BALLIN_BACKUP_OPEN_OPTIONAL_BROWSER: '1' } : {}),
         NODE_OPTIONS: `--require ${JSON.stringify(path.join(root, 'preload.cjs'))} ${capture.env.NODE_OPTIONS}`,
       }, `
         const child = require('child_process'); const spawn = child.spawnSync;

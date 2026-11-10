@@ -28,6 +28,32 @@ describe('onboarding sandbox', function() {
     const result = runSandbox(sandbox, ['install'], 'y\ny\n\ncreate\n\ny\ny\ny\n\n\n\n\ny\nn\n');
     assert.equal(result.status, 0, result.stdout + result.stderr);
   };
+  it('keeps controlled NVM independent of host toolcache permissions', () => {
+    cleanupSandbox(sandbox.root); sandbox = createSandbox({ quickstart: true });
+    const toolcache = path.join(sandbox.root, 'host-toolcache'); fs.mkdirSync(toolcache, { mode: 0o777 }); fs.chmodSync(toolcache, 0o777);
+    const hostNode = path.join(toolcache, 'node'); fs.copyFileSync(process.execPath, hostNode);
+    const directory = path.join(sandbox.home, '.config/nvm');
+    const source = path.join(sandbox.root, 'nvm-fixture.sh');
+    const result = spawnSync('/bin/bash', ['--noprofile', '--norc', '-c', '. "$1"; nvm install --lts', 'fixture', source], {
+      env: { ...sandboxEnvironment(sandbox), NVM_DIR: directory, BALLIN_QA_NODE: hostNode }, encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const installed = path.join(directory, 'versions/node/v26.13.0/bin/node');
+    assert.isFalse(fs.lstatSync(installed).isSymbolicLink());
+    assert.isTrue(require('../commands/nvm.ts').trustedNvmDirectory(directory, source));
+    assert.equal(runNode('process.exit(0)').status, 0);
+  });
+  it('accepts only an unchanged private copy of the controlled NVM runtime', () => {
+    cleanupSandbox(sandbox.root); sandbox = createSandbox({ quickstart: true });
+    const bin = path.join(sandbox.home, '.config/nvm/versions/node/v26.13.0/bin');
+    fs.mkdirSync(bin, { recursive: true });
+    const node = path.join(bin, 'node'); fs.copyFileSync(process.execPath, node);
+    assert.equal(runNode('process.exit(0)').status, 0);
+    fs.writeFileSync(node, '#!/bin/sh\nexit 0\n');
+    assert.notEqual(runNode('process.exit(0)').status, 0);
+    fs.unlinkSync(node); fs.symlinkSync(process.execPath, node);
+    assert.notEqual(runNode('process.exit(0)').status, 0);
+  });
   it('runs custom-host creation and backup through the guarded installer and installed CLI', () => {
     const remoteFile = path.join(sandbox.remote, 'repository.json');
     const remote = JSON.parse(fs.readFileSync(remoteFile, 'utf8')); remote.host = 'git.example.com';

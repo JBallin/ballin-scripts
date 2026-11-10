@@ -287,7 +287,9 @@ documentation_pointer() {
     printf '\033]8;;%s\033\\\033[34m%s\033[0m\033]8;;\033\\\n' "$target" "$label" >&"$stream"
   else
     safe_url=${safe_url#https://}; safe_url=${safe_url#http://}
-    printf '%s: %s\n' "$safe_label" "$safe_url" >&"$stream"
+    printf '%s: ' "$safe_label" >&"$stream"
+    url_reference "$safe_url" "$stream" >&"$stream"
+    printf '\n' >&"$stream"
   fi
 }
 error_icon() {

@@ -58,6 +58,16 @@ describe('optional completion setup', () => {
     assert.notInclude(output, 'Enable it later');
     assert.notInclude(output, 'https://');
   });
+  it('keeps skipped Zsh directory status adjacent to the question', () => {
+    const events: string[] = [];
+    offerCompletionSetup('guide', {
+      env, interactive: true, presentation: 'installation',
+      write: (text = '') => events.push(text),
+      prompt: () => { events.push('directory question'); return { text: 'skip', eof: false }; },
+    });
+    assert.deepEqual(events.slice(0, 2), ['', 'directory question']);
+    assert.isTrue(events[2].startsWith('Tab completion skipped.'));
+  });
   it('creates only the standard file privately and reports concise completion status', () => {
     assert.equal(offer(['y']).split('\n').at(-1), 'Tab completion enabled.');
     const profile = path.join(home, '.zshrc');
@@ -84,7 +94,7 @@ describe('optional completion setup', () => {
         assert.isFalse(events.some(event => event.includes('Optional tab completion')));
         if (eofAt !== 0) assert.include(events, 'prompt:Enable Ballin tab completion in ~/.zshrc? [y/N] ');
         if (presentation === 'installation') assert.equal(events[0], 'write:');
-        assert.equal(events.filter(event => event === 'write:').length, (presentation === 'installation' ? 1 : 0) + (eofAt === 0 ? 1 : 0));
+        assert.equal(events.filter(event => event === 'write:').length, presentation === 'installation' ? 1 : 0);
         assert.equal(question, eofAt === 0 ? 1 : 2);
         assert.isFalse(fs.existsSync(path.join(home, '.zshrc')));
       });

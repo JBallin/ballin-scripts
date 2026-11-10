@@ -381,7 +381,18 @@ case "$name" in
         [[ "\${FAKE_BACKUP_FAIL:-0}" != 1 ]] || exit 1
         if [[ "\${FAKE_CHECK_NPM_COLLECTOR:-0}" == 1 ]]; then npm list -g --depth=0 >/dev/null; fi
         if ! grep -q '"repository":{' "$HOME/.ballin-scripts/ballin.config.json"; then printf 'Backup is not configured\\n' >&2; exit 1; fi ;;
-      'backup open') [[ "\${FAKE_OPEN_FAIL:-0}" != 1 ]] || exit 1 ;;
+      'backup open')
+        if [[ "\${FAKE_OPEN_VALIDATION_FAIL:-0}" == 1 ]]; then
+          printf '%s\\n' 'ballin backup: GitHub authentication is unavailable.' >&2
+          exit 1
+        fi
+        if [[ "\${FAKE_OPEN_STATUS:-0}" != 0 ]]; then
+          if [[ "\${FAKE_OPEN_STATUS}" == 1 ]]; then
+            printf '%s\\n' 'ballin backup open: unable to open your browser. Open https://github.com/fixture/private-backup manually.' >&2
+            [[ "\${BALLIN_BACKUP_OPEN_OPTIONAL_BROWSER:-0}" != 1 ]] || exit 0
+          fi
+          exit "\${FAKE_OPEN_STATUS}"
+        fi ;;
       *) exit 97 ;;
     esac ;;
   *) exit 97 ;;
@@ -526,6 +537,7 @@ esac
       if (noBrew) {
         fs.mkdirSync(path.join(prefix, 'opt/nvm/libexec'), { recursive: true });
         fs.copyFileSync(path.join(root, 'nvm-source.sh'), path.join(prefix, 'opt/nvm/libexec/nvm.sh'));
+        fs.writeFileSync(path.join(prefix, 'opt/nvm/libexec/nvm-exec'), '#!/bin/sh\nexec \"$@\"\n', { mode: 0o755 });
         fs.mkdirSync(path.join(home, '.nvm'));
         fs.symlinkSync(path.join(prefix, 'opt/nvm/libexec/nvm.sh'), path.join(home, '.nvm/nvm.sh'));
       }
@@ -586,6 +598,101 @@ esac
     assert.notInclude(switched.stdout, 'Global npm packages may need'); assert.include(readLog(), 'nvm:install:--lts');
     assert.isTrue(fs.existsSync(path.join(tools, 'node')));
   });
+  for (const consent of [false, true]) it(`lets compatible Node decline unloadable NVM (consent: ${consent})`, () => {
+    const nvm = path.join(home, '.nvm'); fs.mkdirSync(nvm);
+    fs.writeFileSync(path.join(nvm, 'nvm.sh'), 'return 1\n');
+    const result = run('y\ny\ny\n', { FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: consent ? 'y\n' : 'n\n' });
+    assert.equal(result.status, consent ? 1 : 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Existing NVM could not be loaded.');
+    assert.notInclude(readLog(), 'nvm:install:');
+    if (consent) assert.include(result.stderr, 'Repair its source');
+  });
+  for (const unsafe of ['source', 'parent', 'target parent', 'link parent', 'intermediate symlink']) {
+    it(`lets compatible Node skip unsafe NVM ${unsafe} without executing it`, () => {
+      const nvm = path.join(home, '.nvm'); fs.mkdirSync(nvm);
+      const marker = path.join(root, 'outside-probe');
+      fs.writeFileSync(path.join(nvm, 'nvm.sh'), `printf compromised > '${marker}'\n` + fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8'));
+      let selected = nvm;
+      if (unsafe === 'source') fs.chmodSync(path.join(nvm, 'nvm.sh'), 0o666);
+      if (unsafe === 'parent') fs.chmodSync(nvm, 0o777);
+      if (unsafe === 'target parent') {
+        const target = path.join(root, 'writable'); fs.mkdirSync(target);
+        fs.renameSync(path.join(nvm, 'nvm.sh'), path.join(target, 'nvm.sh'));
+        fs.symlinkSync(path.join(target, 'nvm.sh'), path.join(nvm, 'nvm.sh')); fs.chmodSync(target, 0o777);
+      }
+      if (unsafe === 'link parent' || unsafe === 'intermediate symlink') {
+        const parent = path.join(root, 'writable'); fs.mkdirSync(parent);
+        fs.symlinkSync(nvm, path.join(parent, 'linked')); fs.chmodSync(parent, 0o777);
+        selected = path.join(parent, 'linked');
+        if (unsafe === 'intermediate symlink') {
+          fs.symlinkSync(selected, path.join(root, 'outer')); selected = path.join(root, 'outer');
+        }
+      }
+      const result = run('', { NVM_DIR: selected, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'n\n' });
+      assert.isFalse(fs.existsSync(marker), 'discovery must not execute an outside-marker payload');
+      assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'not trusted');
+      assert.include(result.stdout, 'Use NVM with Node.js LTS instead?');
+      const consented = run('', { NVM_DIR: selected, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'y\n' });
+      assert.notEqual(consented.status, 0); assert.include(consented.stderr, 'not trusted');
+      assert.isFalse(fs.existsSync(marker));
+    });
+  }
+  if (process.platform === 'darwin') for (const linked of [false, true]) it(`rejects a write-granting NVM ACL on ${linked ? 'symlink' : 'file'} before executing the source`, () => {
+    const nvm = path.join(home, '.nvm'); fs.mkdirSync(nvm);
+    const marker = path.join(root, 'outside-probe');
+    const source = path.join(nvm, 'nvm.sh');
+    fs.writeFileSync(source, `printf compromised > '${marker}'\n` + fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8'));
+    if (linked) { fs.renameSync(source, path.join(root, 'source.sh')); fs.symlinkSync(path.join(root, 'source.sh'), source); }
+    assert.equal(spawnSync('/bin/chmod', ['-h', '+a', `everyone allow ${linked ? 'delete' : 'write'}`, source]).status, 0);
+    const result = run('', { FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'n\n' });
+    assert.isFalse(fs.existsSync(marker)); assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(result.stdout, 'not trusted');
+  });
+  for (const unsafe of ['root world', 'root group', 'versions', 'cache', 'node link', 'nested link', 'missing root parent']) {
+    it(`rejects a peer-writable NVM working tree before its install can execute Node: ${unsafe}`, () => {
+      const prefix = nativeBrew();
+      const libexec = path.join(prefix, 'opt/nvm/libexec'); fs.mkdirSync(libexec, { recursive: true });
+      const nvm = path.join(home, '.nvm'); const bin = path.join(nvm, 'versions/node/v26.13.0/bin');
+      fs.mkdirSync(bin, { recursive: true });
+      const marker = path.join(root, 'executed-peer-node');
+      fs.writeFileSync(path.join(bin, 'node'), `#!/bin/sh\nprintf compromised > '${marker}'\n`, { mode: 0o700 });
+      const script = fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8').replace('    install)\n', '    install)\n      "$NVM_DIR/versions/node/v26.13.0/bin/node"\n');
+      fs.writeFileSync(path.join(libexec, 'nvm.sh'), script);
+      fs.writeFileSync(path.join(libexec, 'nvm-exec'), '#!/bin/sh\nexec \"$@\"\n', { mode: 0o755 });
+      let selected = nvm;
+      if (unsafe === 'root world') fs.chmodSync(nvm, 0o777);
+      if (unsafe === 'root group') fs.chmodSync(nvm, 0o770);
+      if (unsafe === 'versions') fs.chmodSync(path.join(nvm, 'versions'), 0o777);
+      if (unsafe === 'cache') { fs.mkdirSync(path.join(nvm, '.cache')); fs.writeFileSync(path.join(nvm, '.cache/archive'), 'untrusted'); fs.chmodSync(path.join(nvm, '.cache/archive'), 0o666); }
+      if (unsafe === 'node link') {
+        const outside = path.join(root, 'peer-node'); fs.renameSync(path.join(bin, 'node'), outside); fs.chmodSync(outside, 0o777);
+        fs.symlinkSync(outside, path.join(bin, 'node'));
+      }
+      if (unsafe === 'nested link') {
+        const versions = path.join(nvm, 'versions'); const external = path.join(root, 'external-versions');
+        fs.renameSync(versions, external); fs.symlinkSync(external, versions);
+        const parent = path.join(root, 'outside'); fs.mkdirSync(parent); fs.chmodSync(parent, 0o777);
+        const target = path.join(parent, 'node'); fs.renameSync(path.join(bin, 'node'), target); fs.symlinkSync(target, path.join(bin, 'node'));
+      }
+      if (unsafe === 'missing root parent') { selected = path.join(nvm, 'missing'); fs.chmodSync(nvm, 0o777); }
+      const result = run('y\ny\ny\n', { NVM_DIR: selected, PATH: `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix, FAKE_EARLY_ANSWER: 'n\n', FAKE_NVM_ANSWER: 'y\n' });
+      assert.isFalse(fs.existsSync(marker), 'peer-supplied Node must never execute');
+      assert.notEqual(result.status, 0, result.stdout + result.stderr);
+      assert.include(result.stderr, 'not trusted');
+      assert.notInclude(readLog(), 'nvm:install:');
+    });
+  }
+  if (process.platform === 'darwin') for (const unsafe of [false, true]) {
+    it(`${unsafe ? 'rejects world-write in' : 'accepts admin-group directories in'} a standard Homebrew NVM route`, () => {
+      const prefix = nativeBrew();
+      for (const name of ['opt', 'Cellar']) {
+        const directory = path.join(prefix, name);
+        fs.chownSync(directory, process.getuid!(), 80); fs.chmodSync(directory, unsafe ? 0o777 : 0o775);
+      }
+      const result = run('y\ny\ny\n', { PATH: `${prefix}/bin:${tools}`, FAKE_NATIVE_PREFIX: prefix, FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n' });
+      if (unsafe) { assert.notEqual(result.status, 0); assert.include(result.stderr, 'not trusted'); }
+      else { assert.equal(result.status, 0, result.stdout + result.stderr); assert.include(readLog(), 'nvm:install:--lts'); }
+    });
+  }
   for (const linked of ['NVM directory', 'alias directory', 'default alias', 'hard-linked default alias']) {
     it(`keeps compatible Node by default with a linked ${linked} without changing NVM`, () => {
       const actual = path.join(root, 'existing-nvm'); fs.mkdirSync(path.join(actual, 'alias/lts'), { recursive: true });
@@ -640,6 +747,7 @@ esac
       for (const [keg, label] of [[oldKeg, 'old-keg'], [nextKeg, 'new-keg']]) {
         fs.mkdirSync(path.join(keg, 'libexec'), { recursive: true });
         fs.writeFileSync(path.join(keg, 'libexec/nvm.sh'), fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8') + `\nexport FAKE_LOADED_NVM=${label}\n`);
+        fs.writeFileSync(path.join(keg, 'libexec/nvm-exec'), '#!/bin/sh\nexec \"$@\"\n', { mode: 0o755 });
       }
       const opt = path.join(prefix, 'opt/nvm'); fs.symlinkSync(oldKeg, opt);
       const nvm = path.join(home, '.nvm'); fs.mkdirSync(path.join(nvm, 'alias'), { recursive: true });
@@ -670,6 +778,7 @@ esac
       const prefix = nativeBrew(); const keg = path.join(prefix, 'Cellar/nvm/0.40.8');
       fs.mkdirSync(path.join(keg, 'libexec'), { recursive: true });
       const source = path.join(keg, 'libexec/nvm.sh'); fs.copyFileSync(path.join(root, 'nvm-source.sh'), source);
+      fs.writeFileSync(path.join(keg, 'libexec/nvm-exec'), '#!/bin/sh\nexec \"$@\"\n', { mode: 0o755 });
       if (stable === 'different') {
         fs.mkdirSync(path.join(prefix, 'opt/nvm/libexec'), { recursive: true });
         fs.writeFileSync(path.join(prefix, 'opt/nvm/libexec/nvm.sh'), 'touch "$HOME/UNSAFE"\n');
@@ -2290,7 +2399,7 @@ main
     const detection = result.stdout.indexOf('Checking required tools');
     const preview = result.stdout.indexOf('Installation will:');
     const approval = result.stdout.indexOf(cltInstallQuestion);
-    assert.include(result.stdout, "Installation will:\n  - Install Xcode Command Line Tools\n");
+    assert.include(result.stdout, "\n\nInstallation will:\n  - Install Xcode Command Line Tools\n");
     assert.include(result.stdout, `  - Create Ballin and its settings in ~/.ballin-scripts\n  - Link the ballin command in ~/.local/bin\n`);
     assert.isBelow(choice, detection);
     assert.isBelow(detection, preview);
@@ -2591,14 +2700,16 @@ i Installation details: getballin.com/docs/installation.html#what-installation-c
       });
     }
   }
-  for (const scenario of ['capture', 'backup-declined', 'setup-skipped', 'sign-in-skipped', 'install-declined', 'install-failed', 'backup-failed', 'open-failed', 'cancelled', 'path-incomplete', 'path-incomplete-cancelled']) {
+  for (const scenario of ['capture', 'backup-declined', 'setup-skipped', 'sign-in-skipped', 'install-declined', 'install-failed', 'backup-failed', 'open-failed', 'open-validation-failed', 'open-interrupted-130', 'open-interrupted-143', 'cancelled', 'path-incomplete', 'path-incomplete-cancelled']) {
     it(`prints final terminal guidance only after successful Quickstart: ${scenario}`, () => {
       const overrides: NodeJS.ProcessEnv = {
         FAKE_SKIP_BACKUP: scenario === 'setup-skipped' ? '1' : '0',
         FAKE_AUTH: scenario === 'sign-in-skipped' ? 'missing' : 'ready',
         FAKE_INSTALL_FAIL: scenario === 'install-failed' ? '1' : '0',
         FAKE_BACKUP_FAIL: scenario === 'backup-failed' ? '1' : '0',
-        FAKE_OPEN_FAIL: scenario === 'open-failed' ? '1' : '0',
+        FAKE_OPEN_STATUS: scenario === 'open-failed' ? '1'
+          : scenario.startsWith('open-interrupted-') ? scenario.slice(-3) : '0',
+        FAKE_OPEN_VALIDATION_FAIL: scenario === 'open-validation-failed' ? '1' : '0',
         FAKE_EARLY_ANSWER: scenario === 'sign-in-skipped' ? 'no\n' : 'yes\n',
       };
       const input = scenario === 'sign-in-skipped' ? 'y\ny\n'
@@ -2606,8 +2717,10 @@ i Installation details: getballin.com/docs/installation.html#what-installation-c
         : scenario.startsWith('path-incomplete') ? 'n\ny\n' : 'y\ny\n';
       const backupInput = scenario === 'backup-declined' ? 'n\n' : scenario === 'setup-skipped' ? '\nn\n' : ['cancelled', 'path-incomplete-cancelled'].includes(scenario) ? '' : '\n';
       const result = run(input, overrides, home, '', backupInput);
-      const succeeds = !['install-failed', 'backup-failed', 'open-failed'].includes(scenario);
-      assert.equal(result.status, succeeds ? 0 : 1, result.stdout + result.stderr);
+      const status = scenario.startsWith('open-interrupted-') ? Number(scenario.slice(-3))
+        : ['install-failed', 'backup-failed', 'open-validation-failed'].includes(scenario) ? 1 : 0;
+      const succeeds = status === 0;
+      assert.equal(result.status, status, result.stdout + result.stderr);
       const expected = succeeds && scenario !== 'install-declined' && !scenario.startsWith('path-incomplete');
       assert.equal(result.stdout.split(terminalGuidanceMessage).length - 1, expected ? 1 : 0, result.stdout);
       assert.equal(result.stdout.split(incompletePathGuidance).length - 1, scenario.startsWith('path-incomplete') ? 1 : 0, result.stdout);
@@ -2616,7 +2729,17 @@ i Installation details: getballin.com/docs/installation.html#what-installation-c
       } else if (expected) assert.isTrue(result.stdout.endsWith(`\n${terminalGuidance}`), result.stdout);
       assert.notInclude(result.stdout, 'Tools are ready');
       assert.notInclude(result.stdout, 'Continue setup here');
-      if (scenario === 'capture') assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
+      if (scenario === 'capture' || scenario.startsWith('open-')) {
+        assert.include(readLog(), 'ballin:backup\nballin:backup open\n');
+      }
+      if (scenario === 'backup-failed') assert.notInclude(readLog(), 'ballin:backup open\n');
+      if (scenario === 'open-failed') {
+        assert.include(result.stderr, 'Open https://github.com/fixture/private-backup manually.');
+      }
+      if (scenario === 'open-validation-failed') {
+        assert.include(result.stderr, 'GitHub authentication is unavailable.');
+        assert.notInclude(result.stderr, 'manually.');
+      }
       if (scenario.startsWith('path-incomplete')) {
         assert.equal(result.stdout.slice(result.stdout.indexOf(firstBackupPrompt)), firstBackupPrompt + (scenario.endsWith('cancelled') ? '\n' : '\n\n') + incompletePathGuidance);
         assert.include(result.stdout, 'PATH setup skipped.');
