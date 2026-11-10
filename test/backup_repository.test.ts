@@ -298,7 +298,9 @@ describe('private repository transport', () => {
     assert.include(repositoryReadmeContents, 'portable between installations');
     assert.include(repositoryReadmeContents, 'not a complete copy of your local Ballin configuration');
     assert.include(repositoryReadmeContents, 'current backup behavior and guidance');
-    assert.include(repositoryReadmeContents, 'github.com/JBallin/ballin-scripts/tree/main/docs');
+    assert.include(repositoryReadmeContents, '[Ballin documentation](https://github.com/JBallin/ballin-scripts/tree/main/docs)');
+    assert.notInclude(repositoryReadmeContents, 'getballin.com');
+    assert.include(repositoryReadmeContents, '[Ballin](https://github.com/JBallin/ballin-scripts)');
     assert.include(repositoryReadmeContents, 'uses `.ballin-backup.json` to identify this repository');
     const updates = state.requests.filter((r) => r.method === 'PATCH');
     assert.lengthOf(updates, 1);

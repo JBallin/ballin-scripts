@@ -127,11 +127,11 @@ let currentAnalyticsRuntime: AnalyticsRuntime | undefined;
 let currentBehavioralScope: { cancelled: boolean } | undefined;
 const allowedDurations = new Set(['unknown', '<1s', '1-10s', '10-60s', '1-10m', '10m+']);
 const installIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const defaultAnalyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
+const defaultAnalyticsDocsUrl = 'getballin.com/docs/analytics.html#what-will-analytics-share';
 const productionAnalyticsEndpoint = 'https://ballin-scripts-analytics.jballin.workers.dev/v1/events';
 const analyticsDisclosureFor = (docsUrl = defaultAnalyticsDocsUrl): string => (
   'i Analytics report command results, not backup contents.\n'
-  + 'i Analytics details:\n' + docsUrl
+  + 'i Analytics details: ' + docsUrl
 );
 const analyticsPromptFor = (defaultEnabled = false): string => (
   `Share usage analytics to help improve Ballin? ${defaultEnabled ? '[Y/n]' : '[y/N]'} `

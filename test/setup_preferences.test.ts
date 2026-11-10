@@ -55,7 +55,7 @@ describe('general preference review', () => {
       for (const key of ['npm', 'selfUpdate', 'cleanup', 'softwareupdate']) assert.equal(read().update[key], String(enabled));
       assert.equal(read().analytics.enabled, String(enabled));
       assert.equal(read().backup.includeSensitive, 'true'); assert.deepEqual(read().custom, { retained: true });
-      assert.equal(result.stdout.split('docs/optional-capabilities.md').length - 1, 1);
+      assert.equal(result.stdout.split('docs/optional-capabilities.html').length - 1, 1);
       assert.equal(result.stdout.split('Run `ballin backup setup`').length - 1, 1);
       assert.include(result.stdout, '==> ballin update'); assert.include(result.stdout, '==> Analytics');
       assert.notInclude(result.stdout, 'unchanged at'); assert.notInclude(result.stdout, 'set to `');
@@ -63,7 +63,7 @@ describe('general preference review', () => {
       assert.isBelow(result.stdout.indexOf('==> Analytics'), result.stdout.indexOf('i Analytics report command results, not backup contents.'));
       assert.isBelow(result.stdout.indexOf('i Analytics report command results, not backup contents.'), result.stdout.indexOf('i Analytics details:'));
       assert.isBelow(result.stdout.indexOf('i Analytics details:'), result.stdout.indexOf('Share usage analytics'));
-      assert.equal(result.stdout.split('docs/analytics.md').length - 1, 1);
+      assert.equal(result.stdout.split('docs/analytics.html').length - 1, 1);
       assert.notInclude(result.stdout, 'Change preferences');
     });
   }
@@ -100,7 +100,7 @@ describe('general preference review', () => {
       if (eligible || enabled) assert.include(result.stdout, `NVM? ${enabled ? '[Y/n]' : '[y/N]'}`);
       else assert.include(result.stdout, 'NVM is unavailable to setup.');
       assert.equal(result.stdout.includes('See Node.js setup in Optional capabilities.'), !eligible && !enabled);
-      assert.equal(result.stdout.split('docs/optional-capabilities.md').length - 1, 1);
+      assert.equal(result.stdout.split('docs/optional-capabilities.html').length - 1, 1);
     });
   }
   it('explains an ineligible NVM default without claiming runtime updates require it', () => {
@@ -111,7 +111,7 @@ describe('general preference review', () => {
     assert.include(result.stdout, 'See Node.js setup in Optional capabilities.');
     assert.notInclude(result.stdout, 'Update Node.js LTS through NVM');
     assert.notInclude(result.stdout, 'NVM is unavailable');
-    assert.equal(result.stdout.split('docs/optional-capabilities.md').length - 1, 1);
+    assert.equal(result.stdout.split('docs/optional-capabilities.html').length - 1, 1);
     assert.equal(read().update.nvm, 'false');
   });
   for (const installation of [false, true]) for (const changed of [false, true]) it(`saves ${changed ? 'changed' : 'unchanged'} preferences quietly (installation=${installation})`, () => {
@@ -203,7 +203,8 @@ describe('general preference review', () => {
       assert.equal(result.stdout.includes('Earlier choices saved.'), saved);
       assert.notInclude(result.stdout, 'Earlier confirmed choices remain saved.');
       assert.include(result.stdout, 'Review cancelled'); assert.notInclude(result.stdout, 'Setup complete.');
-      assert.equal(result.stdout.split('Run `ballin backup setup`').length - 1, 1);
+      assert.include(result.stdout, 'Run `ballin setup` to resume preference review.');
+      assert.notInclude(result.stdout, 'Run `ballin backup setup`');
     });
   }
   for (const installation of [false, true]) for (const outcome of ['completed', 'first EOF', 'saved then EOF']) {

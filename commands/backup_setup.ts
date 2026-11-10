@@ -110,7 +110,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     if (configured.kind === 'unconfigured') {
       if (!options.initialConsent && !options.reviewExistingSettings) {
         protectionDetailsLabel = 'Backup details';
-        writeStdoutLine('i Backup details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
+        writeStdoutLine('i Backup details: getballin.com/docs/installation.html#optional-backup-setup-and-reconnect');
         if (readYesNo('Set up private backups to GitHub? [y/N] ') !== true) {
           writeStdoutLine('\nBackup setup skipped.');
           if (!options.deferFollowUp) writeStdoutLine(`Run ${terminalCommand('ballin backup setup')} when you’re ready.`);
@@ -276,7 +276,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
       }
       writeStdoutLine('! Stop backups on other installations before backing up here.');
       protectionDetailsLabel = 'Reconnect details';
-      writeStdoutLine('i Reconnect details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
+      writeStdoutLine('i Reconnect details: getballin.com/docs/installation.html#optional-backup-setup-and-reconnect');
     } else if (found && !found.redirected) {
       writeStdoutLine('That repository name is already in use. Reconnect to a valid backup, or explicitly choose another name.');
       return false;

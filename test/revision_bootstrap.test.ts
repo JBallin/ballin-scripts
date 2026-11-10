@@ -37,6 +37,10 @@ describe('candidate revision bootstrap', () => {
   for (const code of ['404', '401', '403', '429', '500']) it(`fails closed on HTTP ${code}`, () => {
     const r = run(['--version', 'v1.0.0'], { FIXTURE_HTTP: code }); assert.notEqual(r.status, 0); assert.notInclude(r.stdout, 'answer:');
     assert.notInclude(fs.readFileSync(path.join(root, 'requests'), 'utf8'), '/heads/main');
+    if (code === '404') {
+      assert.include(r.stderr, 'Check the requested version, branch, or commit');
+      assert.include(r.stderr, 'wait for publication; no fallback was selected.');
+    }
     assert.include(r.stderr, code === '404' ? 'No published release' : code === '500' ? 'request failed' : 'authentication or rate limit');
   });
   it('refuses self-update without an installation before resolving or offering installation', () => {

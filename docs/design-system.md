@@ -377,7 +377,38 @@ available when needed, not a requirement to add a marker or message to every lin
 
 Warnings include sensitive-data exposure and stopping backups on another
 installation. A failure needs a specific next action. Documentation pointers use
-a neutral label and put the blue URL on the next line. Final completion uses a
+one logical row with a blue `i` and a descriptive link label. On a recognized
+supported terminal, make the label blue (`SGR 34`) and an OSC 8 hyperlink to
+the full HTTPS URL. Leave underlining to the terminal; do not force an SGR
+underline. Unknown terminals, multiplexers, SSH, CI and non-TTY streams use a
+neutral label and visible URL, such as
+`i Installation details: getballin.com/docs/installation.html` instead.
+Let the terminal wrap documentation rows naturally; do not insert line breaks.
+
+The short homepage address always remains visible, without OSC 8. When
+`TERM_PROGRAM` identifies macOS Terminal (`Apple_Terminal`), display
+`getballin.com`; otherwise display `getballin.com/`, including in iTerm2 and
+unknown terminals. Use the established blue URL treatment on color-capable
+TTY output and plain text for redirected, dumb or `NO_COLOR` output. Do not
+force an underline. This address is available for terminal auto-detection;
+the slash form does not guarantee that every terminal will make it clickable.
+
+The initial conservative allowlist is versioned iTerm2 3.1+ and WezTerm date
+builds, identified through `TERM_PROGRAM` and `TERM_PROGRAM_VERSION` with an
+xterm/wezterm TERM. This is capability inference, not a guarantee about a local
+terminal configuration. See the [iTerm2 OSC 8 documentation](https://iterm2.com/3.1/documentation-escape-codes.html)
+and [WezTerm hyperlink documentation](https://wezterm.org/recipes/hyperlinks.html).
+Keep the existing no-ANSI contract: redirected, dumb and nonempty `NO_COLOR`
+output has neither SGR nor OSC 8, and `FORCE_COLOR` does not override it.
+Width calculations ignore hyperlink wrappers and count the visible label.
+
+Choose destinations for the reader’s task, without assuming either host is
+permanent. Keep GitHub issue, security, source, install, clone, release and
+generator-attribution destinations, third-party URLs and backup action links
+unchanged. Generated startup comments retain the repository URL as source
+attribution and as an existing managed-block recognition marker. Generated
+Markdown uses absolute HTTPS documentation links; copying a scheme-free
+terminal display would create a relative link. Final completion uses a
 green `✓` followed by neutral text. Ordinary progress stays plain and quiet;
 do not add a status marker solely to fill the palette. Avoid decorative emoji
 in CLI output. Use functional text symbols for status and convey personality
