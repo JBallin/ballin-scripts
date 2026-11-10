@@ -204,3 +204,17 @@ describe('setup presentation roles', () => {
     assert.equal(terminalProse(`Run (${reference}), then retry.`, stream, {}), `Run\n(${reference}),\nthen retry.`);
   });
 });
+
+describe('pre-existing terminal hyperlinks', () => {
+  const { terminalUrls, terminalProse, visibleWidth } = require('../commands/terminalStyle.ts');
+  for (const ending of ['\x07', '\x1b\\']) {
+    it(`preserves linked URL labels and resumes coloring after ${JSON.stringify(ending)}`, () => {
+      const linked = `\x1b]8;;https://example.com/target${ending}https://example.com/label\x1b]8;;${ending}`;
+      const tty = { isTTY: true, columns: 8 };
+      const env = { TERM: 'xterm' };
+      assert.equal(terminalUrls(`${linked} https://example.com/plain`, tty, env), `${linked} \x1b[34mhttps://example.com/plain\x1b[0m`);
+      assert.equal(terminalProse(linked, tty, env), linked);
+      assert.equal(visibleWidth(linked), 'https://example.com/label'.length);
+    });
+  }
+});
