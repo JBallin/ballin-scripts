@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 TOOLS = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('gallery', TOOLS / 'run.py')
@@ -142,6 +143,33 @@ class GalleryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Unreviewed gallery runtime'):
             gallery.update_example(staged, sample)
         self.assertFalse(marker.exists())
+
+    def test_update_example_accepts_reviewed_history_but_not_unknown_bytes(self):
+        staged = self.root / 'historical-runtime'
+        staged.mkdir()
+        runtime = staged / 'terminalStyle.ts'
+        runtime.write_bytes((TOOLS.parents[1] / 'commands/terminalStyle.ts').read_bytes())
+        source = staged / 'source-evidence/commands/update.ts'
+        source.parent.mkdir(parents=True)
+        source.write_bytes((TOOLS.parents[1] / 'commands/update.ts').read_bytes())
+        pins = self.root / 'historical-pins'
+        pins.mkdir()
+        trusted = {'executableHashes': {'terminalStyle.ts': '0' * 64},
+                   'reviewedProfiles': [{'executableHashes': {'terminalStyle.ts': gallery.digest(runtime)}}]}
+        (pins / 'generation-runtime.json').write_text(json.dumps(trusted))
+        sample = TOOLS / 'update-example.txt'
+        with patch.object(gallery, 'LEGACY', pins):
+            self.assertEqual(gallery.plain_text(gallery.update_example(staged, sample)), sample.read_text())
+            runtime.write_text(runtime.read_text() + '\n// unknown candidate bytes\n')
+            with patch.object(gallery.subprocess, 'check_output') as execute:
+                with self.assertRaisesRegex(ValueError, 'Unreviewed gallery runtime'):
+                    gallery.update_example(staged, sample)
+                execute.assert_not_called()
+            # Candidate-provided metadata must not grant trust.
+            (staged / 'trusted-runtime.json').write_text(json.dumps({
+                'executableHashes': {'terminalStyle.ts': gallery.digest(runtime)}}))
+            with self.assertRaisesRegex(ValueError, 'Unreviewed gallery runtime'):
+                gallery.update_example(staged, sample)
 
     def test_refuses_moving_source_without_creating_output(self):
         output = self.root / 'must-not-exist'
