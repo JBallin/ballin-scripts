@@ -251,6 +251,7 @@ const parseAnalyticsEvent = (payload: unknown, options: ParseOptions): Analytics
       if (!failureCategory || !allowedBackupFailureCategories.has(failureCategory)) return 'failureCategory is not supported';
       return { schemaVersion: 3, installId, dateBucket, event, status, failureCategory };
     }
+    if (event === 'backup.run') return 'backup.run requires schemaVersion 3';
     return { schemaVersion: 2, installId, dateBucket, event, status };
   }
 
