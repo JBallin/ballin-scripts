@@ -510,12 +510,11 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.stdout, 'Ballin updated.\n');
   });
 
-  it('compares catalogs from before filtered Claude settings were supported', () => {
+  it('detects added Claude settings without a collection-policy change', () => {
     const file = path.join(testDir, 'before-scope.json');
     const before = JSON.parse(fs.readFileSync(file, 'utf8'));
     before.sources = before.sources.filter((source: string[]) => source[0] !== 'claude-settings');
     delete before.claudeSettings;
-    before.collectionPolicy = 1;
     fs.writeFileSync(file, JSON.stringify(before));
     const result = runSelfUpdate();
     assert.equal(result.status, 0, result.stderr);

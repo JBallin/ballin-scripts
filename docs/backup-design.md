@@ -439,9 +439,9 @@ scope changes it can express. Increment `collectionPolicy` for a semantic
 collection change outside those declarations, such as new traversal or selection
 semantics. Do not increment it for implementation fixes that preserve the
 supported sources and selection policy, including bounded reading.
-The filtered Claude settings addition advances `collectionPolicy` from 1 to 2
-for its projection semantics. Its top-level and nested allowlists live in the
-canonical scope data, so changes remain visible to the source-scope advisory.
+The Claude settings source and its top-level and nested allowlists are declared
+in the catalog. Changes to these declarations already participate in scope
+comparison and do not require a separate policy increment.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
