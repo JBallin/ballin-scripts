@@ -54,11 +54,25 @@ class RepositoryError extends Error {
   missingRepositoryNode?: boolean;
   reconciliationFailed?: boolean;
   publicationConfirmed?: boolean;
+  confirmationProblem?: RepositoryProblem | 'mismatch';
   constructor(problem: RepositoryProblem) {
     super(repositoryMessages[problem]);
     this.problem = problem;
   }
 }
+// Keep the publication outcome separate from the bounded reason readback failed.
+// Never include provider text, paths, snapshot contents, or raw exception messages.
+const formatRepositoryError = (
+  error: unknown, stream: { isTTY?: boolean } = process.stdout, host = 'github.com',
+): string | undefined => {
+  if (!(error instanceof RepositoryError)) return undefined;
+  const message = formatRepositoryMessage(error.problem, stream, host);
+  if (error.problem !== 'uncertain' || !error.confirmationProblem) return message;
+  const detail = error.confirmationProblem === 'mismatch'
+    ? 'The returned revision or contents did not match the expected backup.'
+    : formatRepositoryMessage(error.confirmationProblem, stream, host);
+  return detail ? `${message} Confirmation check: ${detail}` : message;
+};
 type RepositoryOptions = {
   env?: NodeJS.ProcessEnv;
   runCommand?: (command: string, args: string[], options: SpawnSyncOptions) => {
@@ -729,7 +743,12 @@ const publish = (
   const mutation = isConfigObject(data.createCommitOnBranch) ? data.createCommitOnBranch as Record<string, unknown> : {};
   const returnedCommit = isConfigObject(mutation.commit) ? (mutation.commit as Record<string, unknown>).oid : undefined;
   const confirmation = inspectRepository(before.destination, options);
-  if (confirmation.status !== 'complete') throw new RepositoryError('uncertain');
+  if (confirmation.status !== 'complete') {
+    const failure = new RepositoryError('uncertain');
+    failure.confirmationProblem = confirmation.problem;
+    failure.cleanupFailed = confirmation.cleanupFailed || result.cleanupFailed || Boolean(transportFailure?.cleanupFailed);
+    throw failure;
+  }
   const after = confirmation.read;
   if (
     (returnedCommit !== undefined && returnedCommit !== after.revision.head)
@@ -740,7 +759,12 @@ const publish = (
     || [...additions].some(([name, bytes]) => (
       name !== repositoryReadmeFileName && !after.snapshots.get(name)?.equals(bytes)
     ))
-  ) throw new RepositoryError('uncertain');
+  ) {
+    const failure = new RepositoryError('uncertain');
+    failure.confirmationProblem = 'mismatch';
+    failure.cleanupFailed = result.cleanupFailed || Boolean(transportFailure?.cleanupFailed);
+    throw failure;
+  }
   if (transportFailure) transportFailure.publicationConfirmed = true;
   if (transportFailure?.problem === 'resource-limit') {
     writeStderrLine('ballin backup: repository publication confirmed, but transport limits were exceeded; cache contents were not advanced');
@@ -838,7 +862,7 @@ const repositoryOpenUrl = (destination: RepositoryDestination, options: Reposito
 };
 
 module.exports = {
-  RepositoryError, repositoryMessages, formatRepositoryMessage, readRepositoryAccount, candidateRepository, inspectRepository,
+  RepositoryError, repositoryMessages, formatRepositoryMessage, formatRepositoryError, readRepositoryAccount, candidateRepository, inspectRepository,
   readRepositorySnapshot, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
   inspectRepositoryMaintenance,
   requireRepositoryRead, sameRepositoryRevision, unexpectedRepositoryEntries,
