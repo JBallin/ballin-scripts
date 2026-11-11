@@ -119,7 +119,10 @@ Successful backups omit the category. Ballin sends a category only after
 readback, recovery, and cleanup; it uses `unknown` for ambiguous or competing
 failures. A recovered publication remains successful, while required cache or
 cleanup failure makes the operation fail. Categories suggest investigations;
-they do not identify a specific bug or prove a root cause.
+they do not identify a specific bug or prove a root cause. For an unconfirmed
+publication, a known confirmation-read failure can supply the category (for
+example, a readback timeout is `transport`); it does not mean the upload failed.
+A revision/content mismatch without a known cause remains `unknown`.
 
 For example, a failed backup can send:
 

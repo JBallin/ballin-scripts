@@ -14,7 +14,7 @@ const { configSnapshotFileName } = require('./backup_snapshots.ts');
 const { readPromptLine, readYesNo, promptInputState, CommandInterrupted, rethrowInterruption, writeStdoutLine } = require('./commandHelpers.ts');
 const {
   readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead, inspectRepositoryMaintenance,
-  createRepositoryBackup, ensureManagedBranchRuleset, repositoryUrl, formatRepositoryMessage, RepositoryError: RepositoryLookupError,
+  createRepositoryBackup, ensureManagedBranchRuleset, repositoryUrl, formatRepositoryMessage, formatRepositoryError, RepositoryError: RepositoryLookupError,
   sameRepositoryRevision, unexpectedRepositoryEntries,
 } = require('./backup_repository.ts');
 import type { RepositoryRead, RepositoryMaintenance, RepositoryError, ManagedBranchRulesetOutcome } from './backup_repository.ts';
@@ -335,7 +335,7 @@ const configureRepositoryBackup = (options: RepositorySetupOptions): boolean => 
     }
     rethrowInterruption(error);
     const message = error instanceof PortableConfigError ? (error as Error).message
-      : formatRepositoryMessage((error as RepositoryError).problem, process.stdout, host) ?? 'Unable to prepare backup configuration.';
+      : formatRepositoryError(error, process.stdout, host) ?? 'Unable to prepare backup configuration.';
     writeStdoutLine((error as RepositoryError).problem === 'unavailable' ? `⚠️  ${message}` : message);
     if (remoteMayExist && recoveryUrl) {
       writeStdoutLine(linkageSaved

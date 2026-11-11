@@ -51,7 +51,7 @@ const { snapshotByteLimit, readBoundedFile, requireWithinLimit, SnapshotLimitErr
 const { DirectorySnapshotError, readDirectorySnapshot, listDirectoryMembers, readDirectoryMember } = require('./directory_snapshot.ts');
 const {
   inspectRepository, requireRepositoryRead, publishRepositorySnapshots,
-  repositoryCacheDirectory, formatRepositoryMessage, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
+  repositoryCacheDirectory, formatRepositoryMessage, formatRepositoryError, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
   unexpectedRepositoryEntries,
   repositorySnapshotByteLimit, requireRepositorySnapshotSizes,
 } = require('./backup_repository.ts');
@@ -603,8 +603,7 @@ const runRepositoryBackup = (
       writeStderrLine(`ballin backup: ${(error as Error).message} Repository and cache contents were not changed.`);
       return false;
     }
-    const problem = (error as RepositoryError).problem;
-    writeStderrLine(`ballin backup: ${formatRepositoryMessage(problem, process.stderr, destination.host) ?? 'Unable to reconcile local backup files.'}`);
+    writeStderrLine(`ballin backup: ${formatRepositoryError(error, process.stderr, destination.host) ?? 'Unable to reconcile local backup files.'}`);
     return false;
   } finally {
     const remoteRemoved = removeRemoteSnapshots(remote);

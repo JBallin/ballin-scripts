@@ -26,6 +26,27 @@ describe('backup terminal failure evidence', () => {
     }
   });
 
+  it('classifies confirmation evidence without claiming publication failed', () => {
+    for (const [problem, expected] of [
+      ['timeout', 'transport'], ['connection', 'transport'], ['authentication', 'authentication'],
+      ['moved', 'reconciliation'], ['cleanup', 'local_state'], ['local-io', 'local_state'],
+      ['mismatch', 'unknown'], ['invalid-data', 'unknown'], ['request', 'unknown'],
+    ]) {
+      const error = new RepositoryError('uncertain');
+      error.confirmationProblem = problem;
+      const evidence: BackupFailureEvidence = {};
+      observeRepositoryFailure(evidence, error);
+      assert.equal(evidence.category, expected);
+      assert.equal(error.problem, 'uncertain');
+      assert.isUndefined(error.publicationConfirmed);
+    }
+    const error = new RepositoryError('uncertain');
+    error.confirmationProblem = 'timeout'; error.cleanupFailed = true;
+    const evidence: BackupFailureEvidence = {};
+    observeRepositoryFailure(evidence, error);
+    assert.equal(evidence.category, 'unknown');
+  });
+
   it('preserves a single family but falls back for competing or unsupported evidence', () => {
     const evidence: BackupFailureEvidence = {};
     observeBackupFailure(evidence, 'transport');
