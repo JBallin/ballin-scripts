@@ -29,6 +29,48 @@ reporting saved profiles, and review the compatibility correction when updating 
 Coverage reporting runs with a 6 GiB JavaScript heap limit to merge the full suite's
 profiles. This process-local Node flag does not change test subprocess heap limits.
 
+## Validation workflow
+
+- Use the Node.js version from `.nvmrc`.
+- Install dependencies with `npm ci`.
+- For code, config, script, or test changes, run targeted local checks for the
+  touched behavior before publication or review. For code changes, include
+  `npm run lint` and the relevant typechecks (`npm run typecheck` and/or
+  `npm run typecheck:analytics-worker`) alongside focused tests. Follow
+  [Test runtime and timeouts](#test-runtime-and-timeouts) for
+  focused commands. Rely on PR CI for the complete validation gate before merge;
+  `.github/workflows/ci.yml` defines its checks, and `package.json` defines the
+  Node validation commands. Run complete validation locally when it supplies
+  needed evidence unavailable from CI, diagnoses a material concern, or an
+  explicit instruction requires it. If required CI is still running, report it
+  as pending.
+- Report validation as passing only after the command completes successfully.
+  A killed, interrupted, tool-expired, or disconnected run without a confirmed
+  exit status is incomplete, even if its output includes passing tests.
+  Distinguish a Mocha test timeout from an interrupted validation command;
+  retain the command, last completed stage, and failure or interruption evidence.
+- Add focused validation when a touched risk is not covered by `npm test`;
+  `.github/workflows/ci.yml` defines the additional shell and workflow checks.
+  Run extra workflow/preflight checks only for related changes. For pin-only
+  edits, prefer portable caller-contract tests locally and rely on CI for
+  tool-dependent checks; see [Pull request review](#pull-request-review).
+- When changing shared validation commands, prerequisites, package metadata, or
+  CI setup, review materially affected non-PR automation consumers and update
+  their trigger, setup, and validation contracts as needed.
+- For docs-only changes such as README or guide edits, skip local validation
+  and rely on CI for automated checks.
+
+- For new or changed interactive user flows, assess `npm run sandbox` walkthrough
+  coverage and extend it when useful beyond existing isolated tests. Exercise
+  relevant supported flows, including proportionate failure, retry, and
+  cancellation cases; report existing coverage, limits, or blockers when a
+  walkthrough is unavailable. Internal-only changes do not require an
+  interactive path, and walkthroughs do not require duplicating the full suite.
+  Follow [Interactive QA sandbox](#interactive-qa-sandbox) for
+  usage and safeguards. It supplements `npm test` and automated regression
+  coverage. Its controlled tools and services do not verify live network access,
+  authentication, or host-tool installation.
+
 ## Pull request review
 
 The [automatic](../.github/workflows/claude-review.yml),
@@ -369,8 +411,8 @@ checks command behavior through real processes.
 
 To run tests with coverage, use `npm run test:coverage`. Even if every test
 passes, the command can still fail because coverage is below the required
-minimum. Check the command’s final result. For agent validation sequencing, see
-[Local commands](../AGENTS.md#local-commands).
+minimum. Check the command’s final result. For validation sequencing, see
+[Validation workflow](#validation-workflow).
 
 Before adding timeout headroom, remove unnecessary waits and accumulated work.
 Give each independent matrix combination its own `it` with the same assertions,
