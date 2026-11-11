@@ -366,7 +366,11 @@ if (require.main === module) {
     if (process.argv[3] === 'file') {
       validatePath(process.argv[2], process.argv[4]);
       const bytes = inDirectory(process.argv[2], path.dirname(process.argv[4]), () => readBoundedFile(path.basename(process.argv[4]), maxBytes, rejectHardlinks).bytes);
-      process.stdout.write(bytes);
+      if (process.argv.includes('--filter-codex-runtime')) {
+        const projected = require('./codex_config_projection.ts').projectCodexConfig(bytes);
+        if (projected.skipped) process.stderr.write('Codex runtime metadata filtering skipped; configuration retained unchanged.\n');
+        process.stdout.write(projected.bytes);
+      } else process.stdout.write(bytes);
     } else {
       process.stdout.write(recursiveSnapshot(process.argv[2], process.argv[3] === 'profiles', process.argv[3] === 'skills', { maxBytes }, {
         markdownOnly: process.argv[3] === 'markdown', claudeSkills: process.argv[3] === 'claude-skills', rejectHardlinks,
