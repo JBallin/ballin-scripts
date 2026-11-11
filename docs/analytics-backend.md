@@ -241,8 +241,8 @@ reset, and live ingestion verification require separate authorization.
 
 The schema-v3 extension covers only terminal `backup.run` outcomes. Failures
 carry one of `transport`, `authentication`, `reconciliation`, `local_state`, or
-`unknown`; successes carry no category. V1 command and v2 behavioral ingestion
-remain compatible. Parent `update.backup` outcomes stay v2 and receive no category.
+`unknown`; successes carry no category. V1 commands remain supported. Parent
+update outcomes stay v2 and receive no category; `backup.run` requires v3.
 
 Each accepted v3 failure increments its behavioral total and its category in one
 transactional D1 batch. The additive `backup_failures_daily` table stores only
@@ -251,12 +251,12 @@ existing aggregate reset scope. There are no raw events or new identifiers.
 This counts each accepted request once; replayed public requests can still be
 counted again. No invocation ID or deduplication history is introduced.
 
-The report shows backup-only category counts. `legacy_uncategorized` is the
-backup failure total minus v3 category counts; it represents older outcomes
-without categories. `unknown` is an explicit new failure with insufficient or
-competing evidence. Category-schema coverage is all v3 failures divided by
-observed backup failures; identified-family coverage excludes both legacy and
-unknown failures. These measures describe reported failures, not all executions.
+The report shows backup-only category counts. `unknown` means insufficient or
+competing evidence. Category-schema coverage is categorized failures divided by
+observed backup failures; identified-family coverage excludes unknown failures.
+A warning identifies mismatched totals, including historical failures without
+category data. Those failures remain in the coverage denominator, not a synthetic
+category. These measures describe reported failures, not all executions.
 Do not add automatic-update parent failures to either denominator.
 
 Categories suggest different investigations: transport points to connection and

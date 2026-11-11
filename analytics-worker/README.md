@@ -70,13 +70,13 @@ Schema-v2 behavioral payload:
   "schemaVersion": 2,
   "installId": "826f9faa-9995-4f66-a01b-73b4f7aebdf1",
   "dateBucket": "2026-06-27",
-  "event": "backup.run",
+  "event": "update.backup",
   "status": "success"
 }
 ```
 
-V2 accepts exactly these five fields. `event` is one of `backup.run`,
-`update.backup`, and `update.self-update`; `status` is `success` or `failure`.
+V2 accepts exactly these five fields. `event` is `update.backup` or
+`update.self-update`; `status` is `success` or `failure`.
 The date is the UTC terminal-outcome bucket. No command, duration, runtime,
 caller, or other dimensions are accepted.
 
@@ -101,8 +101,9 @@ Schema-v3 backup outcome payload extends v2 only for `backup.run`:
 
 V3 failures require exactly one allowlisted `failureCategory`: `transport`,
 `authentication`, `reconciliation`, `local_state`, or `unknown`. V3 successes
-omit that field. Other fields and parent event names are rejected. V1 and v2
-remain accepted unchanged. A v3 failure increments its existing behavioral total
+omit that field. Other fields and parent event names are rejected. `backup.run`
+requires v3; v2 remains supported for parent update events. A v3 failure
+increments its existing behavioral total
 and `backup_failures_daily(date_bucket, category, count)` in one atomic batch.
 Success increments only the existing total. Category storage retains no identity.
 
@@ -346,7 +347,7 @@ The report uses local Wrangler authentication and
 - command success, failure, and unknown counts
 - application, Node.js, and macOS-version trends from existing aggregate rows
 - behavioral outcomes by event: total, successes, failures, and failure rate
-- backup-only failure categories, legacy uncategorized failures, and coverage
+- backup-only failure categories and coverage
 
 Behavioral totals include terminal outcomes only; `total = successes + failures`
 and `failure_rate = failures / total`. The query examples also support daily
@@ -357,7 +358,7 @@ They cannot establish exact direct-backup volume, execution coverage, unique-ins
 adoption, feature retention, or user percentages.
 
 The default output keeps the shared telemetry caveat above the tables, the
-parent/child overlap warning beside behavioral outcomes, and the legacy/unknown
+parent/child overlap warning beside behavioral outcomes, and the unknown-category
 distinction beside category coverage. Extended interpretation lives in the
 [behavioral guide](../docs/analytics-backend.md#interpreting-behavioral-outcomes)
 and [category guide](../docs/analytics-backend.md#backup-failure-categories).
