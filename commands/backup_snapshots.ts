@@ -597,12 +597,32 @@ const configurationSnapshot = (category: 'codex' | 'claude', name: string, relat
 });
 
 // The data catalog owns source and collection scope; capture internals stay here.
+const claudeSettingsSnapshot = (name: string, relative: string): SnapshotDefinition => {
+  const definition = configurationSnapshot('claude', name, relative, false, false, false, false);
+  return {
+    ...definition,
+    discover: (context) => {
+      const result = definition.discover(context);
+      if (result.status !== 'available') return result;
+      return {
+        ...result,
+        collector: {
+          ...result.collector,
+          // Preserve root/mode/relative arguments used by metadata-only source review.
+          args: [path.join(__dirname, 'claude_settings.ts'), ...result.collector.args!.slice(1)],
+        },
+      };
+    },
+  };
+};
+
 type SnapshotSpec =
   | ['file', ...Parameters<typeof fileSnapshot>]
   | ['command', category: SnapshotCategory, group: SnapshotInclusionGroup, name: string, tool: string, command: string]
   | ['editor-file', ...Parameters<typeof editorFileSnapshot>]
   | ['editor-extensions', ...Parameters<typeof editorExtensionsSnapshot>]
   | ['configuration', ...Parameters<typeof configurationSnapshot>]
+  | ['claude-settings', ...Parameters<typeof claudeSettingsSnapshot>]
   | ['bash-completions']
   | ['preferences'];
 const snapshotDefinitions: readonly SnapshotDefinition[] = (backupScope.sources as SnapshotSpec[]).map((spec) => {
@@ -619,6 +639,7 @@ const snapshotDefinitions: readonly SnapshotDefinition[] = (backupScope.sources 
     case 'editor-file': return editorFileSnapshot(...spec.slice(1) as Parameters<typeof editorFileSnapshot>);
     case 'editor-extensions': return editorExtensionsSnapshot(...spec.slice(1) as Parameters<typeof editorExtensionsSnapshot>);
     case 'configuration': return configurationSnapshot(...spec.slice(1) as Parameters<typeof configurationSnapshot>);
+    case 'claude-settings': return claudeSettingsSnapshot(...spec.slice(1) as Parameters<typeof claudeSettingsSnapshot>);
     case 'bash-completions': return bashCompletionsSnapshot();
     case 'preferences': return portableConfigSnapshot();
   }

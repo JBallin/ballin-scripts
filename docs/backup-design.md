@@ -426,7 +426,7 @@ Repository capture selects sources from the canonical definitions described
 below.
 
 `commands/backup_scope.json` owns the source catalog, source roots, recursive
-selection rules, and exported preference keys consumed by the collectors.
+selection rules, and exported settings keys consumed by the collectors.
 Self-update compares this data locally from Git before and after a successful
 refresh, ignoring formatting and the order of sources and selection sets. Capture internals are outside
 that comparison. Missing or unreadable scope data produces an explicit
@@ -442,7 +442,8 @@ supported sources and selection policy, including bounded reading.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
-30 sensitive sources, and one projected preferences snapshot.
+31 sensitive sources, and one projected Ballin preferences snapshot. The filtered
+Claude settings snapshot belongs to `sensitive`, not `preferences`.
 `backup.includeSensitive` is the only local sensitive-source preference. Opting
 in covers the maintained sensitive catalog, including future supported sources;
 existing opt-ins therefore include Codex and Claude Code. Setup discloses this
@@ -470,6 +471,19 @@ unterminated. BOMs and Unicode bytes are preserved without normalization. Invali
 UTF-8 and content with non-text controls use Base64 string content. No timestamps,
 absolute paths or empty directories are stored. Source-specific generated exclusions and
 symlink rejection are documented in [source sensitivity](backup-sources.md#codex-configuration).
+
+### Claude settings projection
+
+`claude_settings.json` uses the existing sensitive-source and traversal rules.
+Capture reconstructs the [allowlisted settings](backup-sources.md#filtered-settings)
+without defaults, sorting keys and adding one final newline. An empty selection
+produces `{}` rather than an absent snapshot.
+
+Require a strict UTF-8 JSON object and validate selected values. Duplicate
+selected keys, including escaped spellings, fail; excluded fields are not
+schema-validated. Bound raw input independently to 16 MiB and count projected
+output toward the shared Claude allowance. Invalid input or overflow aborts
+before publication or cache promotion, with diagnostics that omit source values.
 
 ### Bundle inspection
 
@@ -510,7 +524,7 @@ caches cannot establish a comparison base for new filenames.
 ### Capture bounds and traversal
 
 New Codex and Claude Code captures are each bounded to 16 MiB total normalized
-staged bytes per application (raw files and all archives, including unchanged
+staged bytes per application (raw files, filtered settings, and all archives, including unchanged
 captures) and 8,192 visited entries per
 recursive source. Incremental iterative metadata traversal and opened-file
 bounded reads reject overflow without truncation. Text capture incrementally

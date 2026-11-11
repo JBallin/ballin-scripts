@@ -46,6 +46,7 @@ const sourceDescriptions = new Map<string, string>([
   ['claude_agents.bundle.json', 'Claude agents'],
   ['claude_commands.bundle.json', 'Claude commands'],
   ['claude_skills.bundle.json', 'Claude skills'],
+  ['claude_settings.json', 'Claude settings'],
   ['ballin_config', 'update preferences'],
   ['mas', 'Mac App Store apps'],
 ]);

@@ -497,6 +497,9 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     changeScope((scope) => {
       scope.sources.reverse();
       scope.portableUpdateKeys.reverse();
+      scope.claudeSettings.keys.reverse();
+      scope.claudeSettings.attributionKeys.reverse();
+      scope.claudeSettings.modelKeys.reverse();
       scope.recursive.excludedNames.reverse();
       scope.recursive.claudeSyncBookkeeping.reverse();
     });
@@ -505,6 +508,17 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate();
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, 'Ballin updated.\n');
+  });
+
+  it('detects added Claude settings without a collection-policy change', () => {
+    const file = path.join(testDir, 'before-scope.json');
+    const before = JSON.parse(fs.readFileSync(file, 'utf8'));
+    before.sources = before.sources.filter((source: string[]) => source[0] !== 'claude-settings');
+    delete before.claudeSettings;
+    fs.writeFileSync(file, JSON.stringify(before));
+    const result = runSelfUpdate();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'Ballin updated.\n' + changedLine + reviewLine);
   });
 
   for (const [name, change] of [
@@ -516,6 +530,9 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     ['recursive scope', (scope) => { scope.recursive.markdownSuffix = '.txt'; }],
     ['synced skill origin', (scope) => { scope.recursive.claudeSyncedOrigin = 'default'; }],
     ['portable preferences', (scope) => { scope.portableUpdateKeys.push('another-key'); }],
+    ['Claude settings', (scope) => { scope.claudeSettings.keys.push('another-key'); }],
+    ['Claude attribution', (scope) => { scope.claudeSettings.attributionKeys.push('another-key'); }],
+    ['Claude model settings', (scope) => { scope.claudeSettings.modelKeys.push('another-key'); }],
     ['collection policy', (scope) => { scope.collectionPolicy += 1; }],
   ] as [string, (scope: typeof import('../commands/backup_scope.json')) => void][]) {
     it(`discloses changed ${name} after successful refresh`, () => {
@@ -569,6 +586,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
 
   const requiredScopeFields = [
     'collectionPolicy', 'sources', 'portableUpdateKeys', 'roots', 'recursive', 'preferences', 'bashCompletions',
+    'claudeSettings', 'claudeSettings.keys', 'claudeSettings.attributionKeys', 'claudeSettings.modelKeys',
     ...['editor', 'editorUser', 'codex', 'claude', 'codexEnvironment', 'claudeEnvironment'].map((key) => `roots.${key}`),
     ...['excludedNames', 'skillsExcludedRoot', 'skillsExcludedSidecar', 'profilesPattern', 'markdownSuffix',
       'claudeSyncRoot', 'claudeSyncBookkeeping', 'claudeExcludedRoots', 'claudeExcludedRootPrefix',
@@ -582,6 +600,9 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     ['recursive.skillsExcludedSidecar', ['agents']], ['recursive.profilesPattern', '('],
     ['preferences.path', 'not-an-array'], ['bashCompletions.environment', ''],
     ['portableUpdateKeys', [null]], ['sources', {}], ['sources.0', null],
+    ['claudeSettings', []], ['claudeSettings.keys', [null]],
+    ['claudeSettings.attributionKeys', false], ['claudeSettings.modelKeys', ['']],
+    ['sources.41', ['claude-settings', 'claude_settings.json']],
     ['sources.0', ['file', 'shell']], ['sources.0.0', 'unknown-kind'],
     ...[0, 6, 18, 20].map((index): [string, unknown] => [`sources.${index}.1`, 'unknown-category']),
     ['sources.0.1', 'toString'],
