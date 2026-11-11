@@ -127,7 +127,7 @@ describe('Codex configuration runtime metadata projection', () => {
     ['unknown value', (s) => `custom = undefined\n${s}`],
     ['trailing statement', (s) => `custom = true extra\n${s}`],
     ['raw control character', (s) => `# comment\u0000\n${s}`],
-    ['lone CR', (s) => s.replace('\n', '\r')],
+    ['lone CR', (s) => `custom = true\r${s}`],
     ['multiline key', (s) => `"""key""" = true\n${s}`],
     ['malformed service JSON', (s) => s.replace("SERVICES = '{", "SERVICES = 'broken{")],
     ['duplicate service key', (s) => s.replace('{"browser":', '{"browser":"custom","browser":')],
