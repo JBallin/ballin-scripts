@@ -14,6 +14,10 @@ this does not require installing Ballin or reconnecting backup storage.
 - Review any saved dotfiles before copying or executing them, and manually adapt
   paths and settings to the new machine. See [Backup sources and sensitivity](backup-sources.md)
   for what those files can contain.
+- Treat `claude_settings.json` as a [filtered reference](backup-sources.md#filtered-settings).
+  Merge only the values you want into Claude's existing `settings.json`; do not
+  replace the file or delete settings missing from the snapshot. Set up excluded
+  configuration and any custom model/style definitions separately.
 
 On a Mac already connected to the backup, `ballin backup list` shows saved
 snapshot names and `ballin backup read Brewfile` prints the saved Brewfile, if
@@ -22,22 +26,6 @@ present. `ballin backup open` opens the repository and its history on GitHub.
 Snapshots are references for manual setup. Ballin does not automatically restore
 dotfiles or reinstall packages, and it does not synchronize Macs. Keep a broader
 backup for documents, applications, and other data.
-
-## Review Claude Code settings
-
-If `claude_settings.json` is present, treat it as a filtered reference, not a
-replacement for `settings.json`. Manually merge only the values you still want
-into the new Mac's active Claude configuration, preserving existing settings.
-Missing keys are not instructions to delete local values.
-
-Recreate excluded environment values, hooks, permissions, MCP and plugin
-configuration separately. Project-local settings, sign-in, and approvals are not
-restored. Custom model and output-style names may need definitions or access
-not included in the snapshot.
-
-Retained text can still be sensitive. Reconnecting Ballin does not apply these
-settings. See [filtered settings boundaries](backup-sources.md#filtered-settings)
-for the captured fields and exclusions.
 
 ## Choose a backup destination
 

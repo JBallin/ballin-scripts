@@ -439,9 +439,6 @@ scope changes it can express. Increment `collectionPolicy` for a semantic
 collection change outside those declarations, such as new traversal or selection
 semantics. Do not increment it for implementation fixes that preserve the
 supported sources and selection policy, including bounded reading.
-The Claude settings source and its top-level and nested allowlists are declared
-in the catalog. Changes to these declarations already participate in scope
-comparison and do not require a separate policy increment.
 
 The canonical definitions own fixed `inventory`, `sensitive`, and `preferences`
 inclusion groups, separate from tool-oriented categories: 12 inventory sources,
@@ -477,44 +474,16 @@ symlink rejection are documented in [source sensitivity](backup-sources.md#codex
 
 ### Claude settings projection
 
-`claude_settings.json` reads `settings.json` from nonempty `CLAUDE_CONFIG_DIR`,
-otherwise `HOME/.claude`. It uses the existing sensitive-source gate and Claude
-source traversal rules. Discovery and preview check attributes and readability,
-not settings contents. Excluded sensitive sources are not probed.
+`claude_settings.json` uses the existing sensitive-source and traversal rules.
+Capture reconstructs the [allowlisted settings](backup-sources.md#filtered-settings)
+without defaults, sorting keys and adding one final newline. An empty selection
+produces `{}` rather than an absent snapshot.
 
-Capture reconstructs a JSON object from the fixed allowlist documented in the
-[source guide](backup-sources.md#filtered-settings). Each model's
-`modelSettings` object retains only `effortLevel` and `maxEffortLevel`;
-`attribution` retains only `false` or an object with `commit`/`pr` strings and a
-`sessionUrl` boolean. Unknown root and nested keys are omitted without
-schema-validating excluded values. Selected values require their supported types
-and enums; `model`, `language`, `outputStyle`, and `theme` accept arbitrary
-strings. Stable key ordering and one final newline make the output deterministic,
-without injected defaults. Empty objects and unknown-only input yield `{}` plus
-a newline, not an absent snapshot.
-
-Effort values are `low`, `medium`, `high`, or `xhigh`; a per-model effort cap also
-accepts `max`. Editor mode accepts `normal` or `vim`, and view mode accepts
-`default`, `verbose`, or `focus`. Model entries with no retained leaves are
-omitted. Duplicate admitted members, including escaped spellings and repeated
-model identifiers, fail rather than choosing one silently. Duplicates inside
-excluded objects do not affect the projection.
-
-Read the raw source with an independent 16 MiB bound before parsing strict UTF-8
-JSON. Require an object root. An empty file, malformed encoding or JSON, invalid selected value, duplicate
-selected key, or size overflow aborts the backup before publication or cache
-promotion, with value-free diagnostics. Filtered output consumes the shared
-Claude 16 MiB staged-byte budget; a small projection does not waive the raw-read
-bound. Existing saved-snapshot reads do not inspect live settings.
-
-This is a manual-reference snapshot, never automatic application or a complete
-Claude backup. Raw settings, global `.claude.json`, project-local configuration,
-and referenced content remain outside this projection. Environment values,
-helpers, hooks of every type, commands, permissions, sandbox, MCP controls,
-plugins, marketplaces, and path settings are excluded. Separate Markdown and
-skill snapshots retain their existing content rules. Allowlisting is not secret
-scanning: admitted strings can contain sensitive content, and custom model/style
-names do not preserve their definitions or guarantee availability elsewhere.
+Require a strict UTF-8 JSON object and validate selected values. Duplicate
+selected keys, including escaped spellings, fail; excluded fields are not
+schema-validated. Bound raw input independently to 16 MiB and count projected
+output toward the shared Claude allowance. Invalid input or overflow aborts
+before publication or cache promotion, with diagnostics that omit source values.
 
 ### Bundle inspection
 
