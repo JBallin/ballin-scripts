@@ -1243,7 +1243,6 @@ install_nvm_lts() {
       validate_nvm_alias_targets
       printf 'Installing NVM v0.40.8 in %s...\n' "$(display_path "$nvm_directory")"
       local installer_status=0
-      printf "$ PROFILE=/dev/null NVM_DIR=%q METHOD=git BASH_ENV='' ENV='' /bin/bash %q\n" "$nvm_directory" "$scratch/nvm-install.sh"
       # NVM installer overrides must not redirect the promised source or install
       # an inherited NODE_VERSION. Keep unrelated caller/auth environment intact.
       ( unset NVM_SOURCE NVM_INSTALL_VERSION NVM_INSTALL_GITHUB_REPO NODE_VERSION NVM_NODEJS_ORG_MIRROR NVM_IOJS_ORG_MIRROR NVM_AUTH_HEADER NVM_METHOD NVM_ENV NVM_CD_FLAGS
