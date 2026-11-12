@@ -423,7 +423,7 @@ esac
       assert.notInclude(result.stdout, '  - Install NVM using');
       assert.include(result.stdout, '✓ NVM ready; Node.js active for this setup.');
       assert.notInclude(result.stdout, '$ nvm install --lts\n$ nvm');
-      assert.equal((result.stdout.match(route === 'homebrew' ? /^\$ brew install --formula nvm$/gmu : /^\$ PROFILE=\/dev\/null NVM_DIR=/gmu) ?? []).length, 1);
+      assert.equal((result.stdout.match(route === 'homebrew' ? /^\$ brew install --formula nvm$/gmu : /^Installing NVM v0\.40\.8 in ~\/\.nvm\.\.\.$/gmu) ?? []).length, 1);
       if (prefix) { assert.include(profile, prefix + '/opt/nvm/libexec/nvm.sh'); assert.include(profile, prefix + '/opt/nvm/etc/bash_completion.d/nvm'); }
       else assert.include(readLog(), '/nvm-sh/nvm/v0.40.8/install.sh');
     });
@@ -919,6 +919,9 @@ exec /bin/mkdir "$@"
       fs.appendFileSync(path.join(root, 'nvm-install.sh'), `printf 'upstream reload instructions\\n'\nprintf 'upstream diagnostics\\n' >&2\nexit ${installerStatus}\n`);
       const result = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n' });
       assert.equal(result.status, installerStatus, result.stdout + result.stderr);
+      assert.include(result.stdout, 'Installing NVM v0.40.8 in ~/.nvm...');
+      assert.notInclude(result.stdout, 'PROFILE=/dev/null');
+      assert.notInclude(result.stdout, 'nvm-install.sh');
       if (installerStatus === 0) {
         assert.notInclude(result.stdout + result.stderr, 'upstream reload instructions');
         assert.notInclude(result.stdout + result.stderr, 'upstream diagnostics');

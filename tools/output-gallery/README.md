@@ -92,7 +92,9 @@ For a clean Quickstart capture, start without Homebrew or Ballin; for direct
 installation, prepare its prerequisites first. Record the disposable clone name,
 its template/source VM, initial prerequisites and exact reviewed source SHA in the
 capture provenance. Preserve the original VM and its existing data/authentication.
-Use a working guest console or SSH; host-side controls must target only the clone.
+For interactive visual captures, operate the VM through its visible interface
+and record the real interaction. SSH remains an option for other testing;
+host-side controls must target only the clone.
 
 Record real output with an output-only recorder such as `script -q -t 0`, retaining
 the raw ANSI, exact command, prompts/answers, process exit status and downloaded
