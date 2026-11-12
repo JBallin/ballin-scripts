@@ -155,7 +155,8 @@ const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
     fs.writeFileSync(softwareUpdate, `#!/usr/bin/env node\nconst fs = require('fs');\nconst args = process.argv.slice(2);\nif (JSON.stringify(args) !== JSON.stringify(['-ia'])) { process.stderr.write('Unsupported sandbox softwareupdate operation\\n'); process.exitCode = 2; }\nelse { fs.appendFileSync(${JSON.stringify(sandbox.log)}, 'softwareupdate:-ia\\n'); const scenario = JSON.parse(fs.readFileSync(${JSON.stringify(scenarioPath(sandbox))}, 'utf8')).name;\n  if (scenario === 'update-failure') { process.stderr.write('Simulated sandbox macOS update failure\\n'); process.exitCode = 1; }\n  else if (scenario === 'update-interrupt') { fs.writeFileSync(${JSON.stringify(path.join(sandbox.root, 'update-stage.ready'))}, 'ready'); process.stdout.write('Sandbox update stage ready for interruption\\n'); setInterval(() => {}, 1000); }\n  else process.stdout.write('Simulated macOS update; no system changes.\\n'); }\n`, { mode: 0o755 });
     if (sandbox.quickstart) {
       const nvmFixture = path.join(sandbox.root, 'nvm-fixture.sh');
-      fs.copyFileSync(path.join(__dirname, 'onboarding_nvm.sh'), nvmFixture);
+      fs.writeFileSync(nvmFixture, fs.readFileSync(path.join(__dirname, 'onboarding_nvm.sh'), 'utf8')
+        .replaceAll('__BALLIN_QA_NODE_VERSION__', process.version));
       fs.chmodSync(nvmFixture, 0o700);
       sandbox.expected.set(nvmFixture, fs.readFileSync(nvmFixture, 'utf8'));
       const nvmInstaller = path.join(sandbox.root, 'nvm-install.sh');

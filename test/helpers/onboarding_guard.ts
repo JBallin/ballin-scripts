@@ -4,7 +4,7 @@ const path = require('path');
 const root = process.env.BALLIN_QA_ROOT;
 const fail = (): never => { throw new Error('Onboarding sandbox safeguard refused the operation'); };
 const quickstart = root && JSON.parse(fs.readFileSync(path.join(root, '.ballin-onboarding-sandbox.json'), 'utf8')).quickstart === true;
-const nvmBin = root && path.join(root, 'home/.config/nvm/versions/node/v26.13.0/bin');
+const nvmBin = root && path.join(root, `home/.config/nvm/versions/node/${process.version}/bin`);
 const allowedPaths = root && (quickstart
   ? [[path.join(root, 'tools'), path.join(root, 'home/.local/bin')].join(path.delimiter), path.join(root, 'tools')]
   : [[path.join(root, 'tools'), path.join(root, 'home/.local/bin')].join(path.delimiter)]);
