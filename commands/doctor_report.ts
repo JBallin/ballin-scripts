@@ -1,4 +1,4 @@
-const { terminalCommandReferences } = require('./terminalStyle.ts');
+const { terminalCommandReferences, terminalComplete } = require('./terminalStyle.ts');
 
 type DoctorStatus = 'pass' | 'warn' | 'fail' | 'info';
 type DoctorCheck = {
@@ -22,7 +22,7 @@ const statusLabels: Record<DoctorStatus, string> = {
 const nextSteps: Record<string, string> = {
   'runtime.node': 'Install a supported Node.js version and reopen your shell.',
   'commands.path': 'Run the installer again or add the Ballin command directory to PATH.',
-  'config.read': 'Run `ballin config reset` to recreate the config.',
+  'config.read': 'Repair the reported config problem while preserving saved settings and backup linkage, then rerun `ballin doctor`.',
   'backup.gh': 'Install GitHub CLI and authenticate it for GitHub.',
   'backup.read': 'Resolve the reported error, then rerun `ballin doctor`. Use `ballin backup setup` to revalidate the selected backup if needed.',
   'backup.config': 'Run `ballin backup disconnect`, then `ballin backup setup` to select a private repository.',
@@ -62,7 +62,7 @@ const formatVerboseDoctorReport = (report: DoctorReport): string => {
 
 const formatDefaultDoctorReport = (report: DoctorReport): string => {
   if (report.status === 'pass') {
-    return '😎 You\'re ballin.\n';
+    return terminalComplete("You're ballin.") + '\n';
   }
 
   const visibleStatuses = report.status === 'fail' ? ['fail', 'warn'] : ['warn'];

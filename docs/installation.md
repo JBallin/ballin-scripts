@@ -35,6 +35,10 @@ Choose a route:
 
 Both guides provide the command to paste into Terminal. Zsh and Bash are supported.
 
+Homebrew remains optional with either route. See
+[Getting the most out of Ballin](getting-the-most-out-of-ballin.md) for optional
+tools that let Ballin maintain more of your environment.
+
 A fresh install checks Git and Node.js, previews installation details, and asks for `[y/N]`
 before making installation changes. After installing the command and offering
 shell completion, it offers backup setup, then general preferences including
@@ -73,6 +77,61 @@ Run `ballin doctor` to check saved snapshot readability, or `ballin backup setup
 for full validation and the settings summary. During `ballin update`, a full
 readiness check follows self-update and reports snapshot-read failures. Fresh
 installs show one completion message after setup.
+
+## Selecting a revision
+
+For an existing installation, use `ballin self-update` for maintenance. It follows
+the default selection; the installed command does not currently accept release,
+SHA or branch selectors. The selectors below belong to initial installation and
+isolated candidate testing.
+
+Stable is the installer default. While the first release is being prepared,
+the public commands explicitly select `main` with `BALLIN_UPDATE_TRACK=main`.
+Both entrypoints accept one optional selector after the script's argument-zero name:
+
+```shell
+BALLIN_UPDATE_TRACK=main /bin/bash -c "$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)" ballin-install --sha FULL_COMMIT_SHA
+```
+
+Use `--version v1.0.0` for a published stable release, `--sha` for a full commit
+SHA, or `--branch NAME` for a branch. Branches are resolved once; setup and the
+installed checkout use that exact commit. Only revisions with the supported
+installer contract (protocol 2) can be selected. An absent release, unsupported
+revision, or network error stops installation; none causes a fallback to main.
+
+A versioned release entrypoint defaults to its embedded version. Release
+preparation removes the temporary main override and updates the public command
+for the intended release; publication is separately approved. Release
+notes live in [GitHub Releases](https://github.com/JBallin/ballin-scripts/releases).
+
+For developer main tracking, set `export BALLIN_UPDATE_TRACK=main` in your shell.
+It affects default installation and self-update selection only. An explicit
+installer selector takes precedence. Unset it to restore the normal default;
+there is no customer configuration setting or setup question for this choice.
+
+Reinstalling the same revision preserves existing settings and reoffers the
+usual setup review. Changing a clean installation's revision or track requires
+confirmation. Declining a revision or track change leaves the checkout unchanged and exits
+successfully. Dirty or conflicting checkouts stop; Ballin does not stash,
+reset, merge, or repair local work. Preserve local work before retrying.
+Release/SHA installs use detached HEAD; create a branch before making commits.
+
+Fresh installs prepare the selected checkout in a private temporary directory
+under your home directory, then move the completed checkout into
+`~/.ballin-scripts`. A failure before that move can be retried without repairing
+a partial installation. A destination created in the meantime is preserved.
+
+Self-update checks the target's Node requirement before changing the checkout.
+Activate a compatible Node runtime and retry when instructed. Automatic
+maintenance refuses changes requiring consent, including major upgrades,
+downgrades, and track switches; run `ballin self-update` interactively instead.
+A failure after checkout reports the installed revision and incomplete setup.
+
+A release label means publication was verified during installation/update and
+still matches the local commit and tag. Ordinary commands do not contact GitHub
+to recheck publication. Explicit SHA/branch installs display development
+identity even at a tagged commit. Local modifications invalidate clean release
+identity. Configuration and backup/cache contents are preserved across updates.
 
 ## Shell completion
 
@@ -171,13 +230,15 @@ CLI discovery/installation, sign-in, destination setup, verification and run-now
 Existing tools, accounts, saved backup settings and backups remain.
 Later `ballin backup setup` checks current prerequisites and GitHub access.
 
-Quickstart accepts Node.js 24.12 or newer. When Node is missing or incompatible,
-it offers NVM and latest compatible LTS Node. With compatible Node, switching is
-optional and defaults to keeping the current setup. Before consent it explains
-activation, the future default, retained installations and the need to reinstall
-any global npm packages you still use. An existing loadable NVM is reused.
-A fresh installation uses `nvm install --lts` to activate LTS and create a
-following-LTS default; changing an existing default requires switch consent.
+Quickstart accepts Node.js 24.12 or newer. When Node.js is missing or
+incompatible, it offers to install Node.js using NVM. With compatible Node.js,
+using NVM with Node.js LTS is optional and defaults to keeping the current setup.
+The [Node.js details](optional-capabilities.md#nodejs) link before the question
+explains activation, the following-LTS default, separate shell-startup consent,
+and existing installations and global packages. An existing loadable NVM is reused.
+Consented NVM setup uses `nvm install --lts` to activate LTS for this setup and
+sets the following-LTS default; changing an existing default requires switch
+consent.
 
 For missing NVM, Quickstart uses suitable existing Homebrew, otherwise the
 versioned official NVM installer. It does not install Homebrew for this purpose.
@@ -329,9 +390,9 @@ for how confirmed choices are saved when revisiting settings.
 
 The installer can create or change:
 
-- `~/.ballin-scripts/`, a local Git checkout of `ballin-scripts`. Rerunning the
-  installer updates this checkout; if local changes block checkout or merge,
-  Ballin may move tracked and untracked changes to a Git stash during recovery.
+- `~/.ballin-scripts/`, a local Git checkout of `ballin-scripts`. Installation
+  stops if the checkout is dirty or has conflicting local files. Preserve local
+  work before retrying; Ballin does not stash or reset it.
 - `~/.ballin-scripts/ballin.config.json`, which stores local Ballin settings.
   Reconnecting to a backup can recover supported portable preferences while
   preserving existing local choices.
@@ -425,6 +486,11 @@ include them, defaulting to “No.” Choosing No excludes them and continues. R
 [what Ballin will back up](backup-sources.md#what-will-ballin-back-up) for the
 baseline, sensitive-source scope, and privacy limitations.
 
+Excluding sensitive sources still includes the baseline inventories and filtered
+preferences; those can reveal private tool choices, identities, paths or URLs.
+A private repository limits access but does not make its contents invisible to
+GitHub, the hosting operator or authorized repository users.
+
 The preview shows available resolved source paths. For synced Claude
 skills, Ballin reads local collection manifests to select plugin packages; it does
 not read selected file contents or create backup snapshots during this preview.
@@ -438,11 +504,12 @@ destination, creates or reconnects to the repository, attempts optional branch
 protection, clears local backup comparison state, and then saves the destination
 and any supported preferences recovered from the backup.
 Successful new protection gets one concise confirmation during standalone setup;
-installation keeps that success silent. Unsupported protection is silent. A permission note or warning about unconfirmed protection is nonfatal
-and does not mean backup
-setup failed. After updating GitHub access, rerun `ballin backup setup` to make a
-bounded protection attempt on the configured repository without changing local
-backup choices.
+installation keeps that success silent. Unsupported protection is silent. A
+permission note or warning about unconfirmed protection is nonfatal and does not
+mean backup setup failed. Optional protection can need additional GitHub authority beyond
+normal backup access. After updating access, rerun `ballin backup setup` to retry
+protection on the same linked destination; do not disconnect it. The usual
+sensitive-source review still follows, and confirmed choices are saved.
 
 Reconnect restores only
 [supported Ballin preferences](optional-capabilities.md#recovering-ballin-preferences), and
@@ -619,7 +686,7 @@ help, see [Support](../.github/SUPPORT.md). Review output before sharing it and 
 credentials or sensitive backup contents.
 
 If `ballin self-update` fails during setup, the checkout may already be updated;
-address the reported setup error before retrying.
+address the reported setup error, then run `ballin self-update` again.
 
 For other self-update failures, follow the reported error and recovery guidance
 before retrying.

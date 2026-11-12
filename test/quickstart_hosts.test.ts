@@ -41,12 +41,12 @@ describe('Quickstart bootstrap host parity', () => {
         fs.mkdirSync(path.join(home, '.ballin-scripts'));
         fs.writeFileSync(path.join(home, '.ballin-scripts/ballin.config.json'), JSON.stringify(config));
         for (const input of [undefined, 'github.com', 'GIT.EXAMPLE.COM', 'fixture.ghe.com', 'https://git.example.com', 'bad_host', 'K.example.com']) {
-          let expected: string | undefined; let invalid = false;
+          let expected: string | undefined; let invalid = false; let retryableInput = false;
           try {
             readSetupConfigContext(path.join(home, '.ballin-scripts/ballin.config.json'));
             if (configuredBackupDestination(config).kind === 'invalid') throw Error();
             const normalized = input === undefined ? undefined : normalizeBackupHost(input);
-            if (normalized === null) throw Error();
+            if (normalized === null) { retryableInput = true; throw Error(); }
             expected = resolveBackupSetupHost(config, normalized);
           } catch { invalid = true; }
           const result = spawnSync('/bin/bash', ['-c',
@@ -55,7 +55,10 @@ describe('Quickstart bootstrap host parity', () => {
             env: testChildEnvironment({ HOME: home, HOST_SOURCE: path.resolve(__dirname, '../quickstart.sh'), HOST_NODE: process.execPath }),
           });
           assert.isUndefined(result.error);
-          assert.equal(result.status, invalid ? 1 : 0, result.stderr);
+          // Status 2 tells the interactive caller to retry a completed invalid answer;
+          // unsafe stored configuration and conflicting destinations remain status 1.
+          assert.equal(result.status, retryableInput ? 2 : invalid ? 1 : 0, result.stderr);
+          if (retryableInput) { assert.equal(result.stdout, ''); assert.equal(result.stderr, ''); }
           if (!invalid) assert.equal(result.stdout, expected ?? '');
         }
       } finally { fs.rmSync(home, { recursive: true, force: true }); }

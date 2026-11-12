@@ -1,6 +1,6 @@
 // Help-only layout: do not apply to prompts, diagnostics, config or snapshot bytes.
 // Syntax in backticks and URLs stays copyable, even when wider than the terminal.
-const { terminalEmphasis, terminalUrls, visibleWidth } = require('./terminalStyle.ts');
+const { terminalEmphasis, terminalUrls, terminalMarkers, visibleWidth, isDocumentationRow, terminalDocumentation } = require('./terminalStyle.ts');
 
 const wrapHelpWords = (words: string[], width: number, prefix = '', continuation = prefix, suffix = ''): string => {
   const lines: string[] = [];
@@ -51,6 +51,14 @@ const formatHelp = (
       return `${bold('Usage:')} ${bold(wrapped[0].slice(7))}${wrapped.length > 1 ? '\n' + emphasizeIndented(wrapped.slice(1).join('\n')) : ''}`;
     }
     if (!line) { inUsage = false; return line; }
+    if (line.startsWith('i ')) {
+      inUsage = false;
+      if (isDocumentationRow(line)) {
+        const separator = line.indexOf(': ');
+        return terminalDocumentation(line.slice(2, separator), line.slice(separator + 2), stream, env);
+      }
+      return terminalMarkers(wrapHelpLine(line, width), stream, env);
+    }
     // Wrap syntax at argument boundaries. Shell continuations keep concrete
     // examples copyable rather than splitting filenames or option names.
     if (/^ +ballin(?: |$)/u.test(line)) {

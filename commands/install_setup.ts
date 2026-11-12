@@ -1,4 +1,4 @@
-const { terminalCommand, terminalPath, terminalError } = require('./terminalStyle.ts');
+const { terminalCommand, terminalPath, terminalError, terminalComplete, terminalProse } = require('./terminalStyle.ts');
 const fs = require('fs');
 const { offerCompletionSetup } = require('./completion_setup.ts');
 const path = require('path');
@@ -40,6 +40,7 @@ type ConfigureBackupOptions = {
   onCancelled?: () => void;
   initialConsent?: boolean;
   presentation?: 'installation' | 'standalone';
+  deferFollowUp?: boolean;
   showValidationSummary?: boolean;
   maintenanceOnly?: boolean;
   reviewExistingSettings?: boolean;
@@ -83,6 +84,7 @@ const configureBackup = (
     configPath, repoDir, docsUrl, configPrepared: options.configPrepared, originalConfig: options.originalConfig, repositoryName: options.repositoryName, hostname: options.hostname, onCancelled: options.onCancelled,
     initialConsent: options.initialConsent,
     presentation: options.presentation,
+    deferFollowUp: options.deferFollowUp,
     showValidationSummary: options.showValidationSummary,
     maintenanceOnly: options.maintenanceOnly,
     reviewExistingSettings: options.reviewExistingSettings,
@@ -118,7 +120,7 @@ const symlinkBinaries = (repoDir: string, binDir: string, preflight?: CommandPre
       const targetPath = path.join(binDir, binName);
       const current = commandTargetSnapshot(targetPath);
       if (preflight && (preflight.target !== targetPath || preflight.snapshot !== current)) {
-        writeStdoutLine(`Command target changed after review: ${terminalPath(targetPath)}. Inspect it before retrying installation.`);
+        writeStdoutLine(`Command target changed after review: ${terminalPath(targetPath)}. Inspect it before retrying.`);
         return false;
       }
       fs.rmSync(targetPath, { force: true });
@@ -132,7 +134,10 @@ const symlinkBinaries = (repoDir: string, binDir: string, preflight?: CommandPre
   return true;
 };
 
-const resolveBinDir = (): string | null => {
+const setupRetry = (mode: SetupMode): string => mode === 'fresh' ? 'run the installer again'
+  : mode === 'self-update' ? `run ${terminalCommand('ballin self-update')} again`
+    : `use ${terminalCommand('ballin self-update')} for the default selection`;
+const resolveBinDir = (mode: SetupMode): string | null => {
   if (commandExists('brew')) {
     const result = runCommand('brew', ['--prefix']);
     requireUninterrupted(result);
@@ -140,7 +145,8 @@ const resolveBinDir = (): string | null => {
     if (brewPrefix !== null) {
       const prefix = brewPrefix.trimEnd();
       if (!path.isAbsolute(prefix) || /[:\r\n\0]/u.test(prefix)) {
-        writeStdoutLine(`Homebrew returned an invalid installation prefix. Inspect ${terminalCommand('brew --prefix')}, then rerun installation.`);
+        writeStdoutLine(terminalError('Homebrew returned an invalid installation prefix.'));
+        writeStdoutLine(`Inspect ${terminalCommand('brew --prefix')}, then ${setupRetry(mode)}.`);
         return null;
       }
       return path.join(prefix, 'bin');
@@ -151,15 +157,15 @@ const resolveBinDir = (): string | null => {
   return homeDir ? path.join(homeDir, '.local', 'bin') : null;
 };
 
-const validateBinDirInPath = (binDir: string): boolean => {
+const validateBinDirInPath = (binDir: string, mode: SetupMode): boolean => {
   const envPath = process.env.PATH ?? '';
   if (envPath.split(path.delimiter).includes(binDir)) {
     return true;
   }
 
-  writeStdoutLine(`\n⚠️  ERROR: ${terminalPath(binDir)} doesn't seem to be in your path.`);
+  writeStdoutLine(`\n${terminalError(`${terminalPath(binDir)} doesn't seem to be in your path.`)}`);
   writeStdoutLine(`Add ${terminalCommand(`export PATH="${binDir}:$PATH"`)} to your shell profile.`);
-  writeStdoutLine('Then open a new terminal window and run the installer again.');
+  writeStdoutLine(`Then open a new terminal window and ${setupRetry(mode)}.`);
   return false;
 };
 
@@ -180,12 +186,12 @@ const setup = (
       if (destination.kind === 'invalid') throw new Error('Invalid backup destination; disconnect before choosing another host.');
       hostname = resolveBackupSetupHost(originalConfig, process.env.BALLIN_BACKUP_HOSTNAME);
     } catch (error) {
-      writeStdoutLine((error as Error).message);
+      writeStdoutLine(terminalError((error as Error).message));
       return false;
     }
   }
-  const binDir = resolveBinDir();
-  if (!binDir || !validateBinDirInPath(binDir)) {
+  const binDir = resolveBinDir(mode);
+  if (!binDir || !validateBinDirInPath(binDir, mode)) {
     return false;
   }
   let preflight: CommandPreflight;
@@ -197,7 +203,8 @@ const setup = (
     if (preflight.directory !== binDir || preflight.target !== target || typeof preflight.snapshot !== 'string'
       || preflight.snapshot !== commandTargetSnapshot(target)) throw new Error('Command target changed');
   } catch {
-    writeStdoutLine('Unable to verify the reviewed command target. Inspect it before retrying installation.');
+    writeStdoutLine(terminalError('Unable to verify the reviewed command target.'));
+    writeStdoutLine('Inspect it before retrying.');
     return false;
   }
 
@@ -220,15 +227,18 @@ const setup = (
   const backupConfigured = destination.kind === 'repository';
   const backupInvalid = destination.kind === 'invalid';
   let backupSetupSucceeded = true;
+  let backupFlow = false;
+  let backupSetupCancelled = false;
+  let generalReview = false;
   const interactive = mode !== 'self-update' && promptInputState() === 'open';
   const backupSetupAllowed = mode === 'self-update' || process.env.BALLIN_BACKUP_CHOICE !== 'no';
-  if (mode !== 'self-update' && (interactive || backupConfigured || backupInvalid)) writeStdoutLine('\nBallin installed successfully.');
+  if (mode !== 'self-update' && (interactive || backupConfigured || backupInvalid)) writeStdoutLine(`\n${terminalComplete('Ballin installed successfully.')}`);
   if (backupSetupAllowed && (backupConfigured || backupInvalid
     || (interactive && process.env.BALLIN_SKIP_BACKUP_SETUP !== '1'))) {
-    let backupSetupCancelled = false;
+    backupFlow = true;
     if (mode !== 'self-update') writeStdoutLine();
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, {
-      presentation: mode === 'self-update' ? 'standalone' : 'installation', configPrepared: true,
+      presentation: mode === 'self-update' ? 'standalone' : 'installation', configPrepared: true, deferFollowUp: true,
       initialConsent: process.env.BALLIN_BACKUP_CHOICE === 'yes',
       hostname, originalConfig, onCancelled: () => { backupSetupCancelled = true; },
       showValidationSummary: mode !== 'self-update',
@@ -241,7 +251,7 @@ const setup = (
     const { readYesNo } = require('./commandHelpers.ts');
     let review: boolean | null;
     try {
-      review = readYesNo('\nReview your update and analytics preferences? [Y/n] ', true);
+      review = readYesNo('\nReview your Ballin preferences? [Y/n] ', true);
     } catch (error) {
       if (error instanceof CommandInterrupted) throw error;
       writeStderrLine(terminalError('Unable to read preference review input. Earlier installation changes remain.', process.stderr));
@@ -249,15 +259,25 @@ const setup = (
       return false;
     }
     if (review === true) {
+      generalReview = true;
       const { reviewGeneralPreferences } = require('./setup.ts');
-      if (reviewGeneralPreferences(configPathFor(repoDir), { installation: true }) === 'failed') return false;
+      if (reviewGeneralPreferences(configPathFor(repoDir), { installation: true, deferFollowUp: true }) === 'failed') return false;
     }
   }
 
   setupAnalytics(repoDir);
 
+  if (mode !== 'self-update') {
+    const general = `Change preferences with ${terminalCommand('ballin setup')}.`;
+    const backup = backupSetupCancelled ? `Run ${terminalCommand('ballin backup setup')} when you’re ready.`
+      : backupFlow ? `Change backup settings with ${terminalCommand('ballin backup setup')}.`
+      : `Run ${terminalCommand('ballin backup setup')} to configure or review your GitHub backup.`;
+    const followUp = generalReview ? [general, backup] : backupFlow ? [backup, general] : [general];
+    writeStdoutLine('\n' + terminalProse(followUp.join('\n')));
+  }
+
   if (!configExisted && fs.existsSync(configPathFor(repoDir)) && mode !== 'fresh') {
-    writeStdoutLine(`\n${docsUrl}#what-will-installation-change`);
+    writeStdoutLine(terminalProse(`\ni Installation details: ${docsUrl}#what-will-installation-change`));
   }
 
   if (backupSetupSucceeded && process.env.BALLIN_SETUP_RESULT_FILE) {

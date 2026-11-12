@@ -1,3 +1,4 @@
+const { stripAnsi } = require('../commands/terminalStyle.ts');
 const { formatHelp } = require('../commands/help_format.ts');
 
 describe('help layout', () => {
@@ -11,10 +12,10 @@ describe('help layout', () => {
     assert.equal(formatHelp('Usage: ballin setup', { columns: 12 }), 'Usage:\n    ballin\n    setup');
   });
 
-  it('emphasizes help structure without styling descriptions or documentation labels', () => {
-    const text = 'Usage: ballin doctor [--verbose]\n\nCheck readiness.\n\nOptions:\n    --verbose  show full details\n\nExisting backup: Keep the saved destination.\n\n🔗 Details:\nhttps://example.com/guide\n';
+  it('emphasizes help structure with neutral descriptions and labels beside colored info markers', () => {
+    const text = 'Usage: ballin doctor [--verbose]\n\nCheck readiness.\n\nOptions:\n    --verbose  show full details\n\nExisting backup: Keep the saved destination.\n\ni Details: getballin.com/docs/installation.html\n';
     assert.equal(formatHelp(text, { columns: 80, isTTY: true }, { TERM: 'xterm' }),
-      '\x1b[1mUsage:\x1b[0m \x1b[1mballin doctor [--verbose]\x1b[0m\n\nCheck readiness.\n\n\x1b[1mOptions:\x1b[0m\n    \x1b[1m--verbose\x1b[0m  show full details\n\n\x1b[1mExisting backup:\x1b[0m Keep the saved destination.\n\n🔗 Details:\n\x1b[34mhttps://example.com/guide\x1b[0m\n');
+      '\x1b[1mUsage:\x1b[0m \x1b[1mballin doctor [--verbose]\x1b[0m\n\nCheck readiness.\n\n\x1b[1mOptions:\x1b[0m\n    \x1b[1m--verbose\x1b[0m  show full details\n\n\x1b[1mExisting backup:\x1b[0m Keep the saved destination.\n\n\x1b[0;34mi\x1b[0m Details: \x1b[34mgetballin.com/docs/installation.html\x1b[0m\n');
     assert.equal(formatHelp('Usage: ballin setup', { columns: 12, isTTY: true }, { TERM: 'xterm' }),
       '\x1b[1mUsage:\x1b[0m\n    \x1b[1mballin\x1b[0m\n    \x1b[1msetup\x1b[0m');
     for (const mode of [
@@ -24,6 +25,17 @@ describe('help layout', () => {
     ]) assert.equal(formatHelp(text, { columns: 80, isTTY: mode.isTTY }, mode.env), text);
   });
 
+  it('keeps documentation pointers on one logical row for natural terminal wrapping', () => {
+    const text = 'i Installation details: getballin.com/docs/installation.html#health-and-recovery\n';
+    for (const columns of [16, 40, 80]) for (const mode of [
+      { isTTY: false, env: {} }, { isTTY: true, env: {} },
+      { isTTY: true, env: { TERM: 'dumb' } }, { isTTY: true, env: { NO_COLOR: '1' } },
+    ]) {
+      const output = formatHelp(text, { columns, isTTY: mode.isTTY }, mode.env);
+      assert.equal(stripAnsi(output), text);
+      assert.notInclude(output, '\x1b]');
+    }
+  });
   it('aligns bold table terms and keeps example command lines plain on supported terminals', () => {
     assert.equal(formatHelp('    --file <path>  print original bytes\n', { columns: 30, isTTY: true }, { TERM: 'xterm' }),
       '    \x1b[1m--file <path>\x1b[0m\n        print original bytes\n');
@@ -80,5 +92,18 @@ describe('help layout', () => {
     }
     assert.equal(formatHelp('one two', { columns: 1 }), 'one\ntwo');
     assert.equal(formatHelp('', { columns: 40 }), '');
+  });
+});
+
+describe('non-documentation help notices', () => {
+  it('wraps ordinary information without treating it as a documentation link', () => {
+    const input = 'Usage: ballin setup\ni Keep saved settings while reviewing preferences.\n    ballin setup';
+    assert.equal(formatHelp(input, { columns: 24 }, { NO_COLOR: '1' }),
+      'Usage: ballin setup\ni Keep saved settings\nwhile reviewing\npreferences.\n    ballin setup');
+    assert.equal(formatHelp('i Keep saved settings.', { columns: 80, isTTY: true }, { TERM: 'xterm' }),
+      '\x1b[0;34mi\x1b[0m Keep saved settings.');
+  });
+  it('preserves empty list placeholders without inventing text', () => {
+    assert.equal(formatHelp('- \n1. ', { columns: 20 }), '- \n1. ');
   });
 });

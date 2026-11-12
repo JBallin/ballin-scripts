@@ -11,6 +11,10 @@ repository. GitHub can access backups on GitHub.com or GHE.com; a GitHub Enterpr
 Server hosting operator and site administrators may also have access. Anyone
 with authorized repository access can read the contents.
 
+Choosing No for sensitive sources does not exclude these baseline inventories
+and preferences or guarantee that they contain no private information. Review
+the source catalog below before backing up, even when sensitive sources stay off.
+
 Sensitive sources are off by default on a new installation. The local
 `backup.includeSensitive` choice adds all currently supported sensitive sources
 and future additions: raw shell/Git/editor configuration, Codex and Claude Code

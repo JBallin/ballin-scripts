@@ -1,91 +1,243 @@
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { spawnSync } = require('node:child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+const helper = path.resolve(__dirname, '../commands/repo_update.ts');
 
-const repoUpdatePath = path.join(__dirname, '..', 'commands', 'repo_update.ts');
-
-describe('repository update CLI', () => {
-  let tempDir: string;
-  let binDir: string;
-  let installedRepo: string;
-  let gitLog: string;
-
+describe('selected checkout integration', () => {
+  let root: string, upstream: string, installed: string, before: string, target: string, preload: string;
+  const git = (cwd: string, args: string[]) => {
+    const r = spawnSync('git', args, { cwd, encoding: 'utf8', env: testChildEnvironment({ HOME: root, PATH: process.env.PATH, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'fixture@example.invalid', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' }) });
+    assert.equal(r.status, 0, r.stderr); return r.stdout.trim();
+  };
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-repo-update-'));
-    binDir = path.join(tempDir, 'bin');
-    installedRepo = path.join(tempDir, 'repo');
-    gitLog = path.join(tempDir, 'git.log');
-    fs.mkdirSync(binDir);
-    fs.mkdirSync(installedRepo);
-    fs.writeFileSync(path.join(binDir, 'git'), `#!/bin/sh
-printf '%s\n' "$*" >> "$FAKE_GIT_LOG"
-exit 0
-`, { mode: 0o755 });
-  });
-
-  afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  for (const signal of ['INT', 'TERM']) {
-    for (const interruptedStep of ['fetch', 'checkout', 'merge']) {
-      it(`stops on child SIG${signal} during ${interruptedStep} without recovery mutations`, () => {
-        fs.writeFileSync(path.join(binDir, 'git'), `#!/bin/sh
-printf '%s\\n' "$*" >> "$FAKE_GIT_LOG"
-if [ "$1" = '${interruptedStep}' ]; then kill -${signal} $$; fi
-exit 0
-`, { mode: 0o755 });
-        const result = spawnSync(process.execPath, [repoUpdatePath, installedRepo], {
-          encoding: 'utf8', env: testChildEnvironment({ PATH: binDir, FAKE_GIT_LOG: gitLog }),
-        });
-        assert.equal(result.status, signal === 'INT' ? 130 : 143, result.stdout + result.stderr);
-        assert.include(result.stdout, 'Interrupted');
-        const steps = ['fetch origin +main:refs/remotes/origin/main', 'checkout main', 'merge origin/main'];
-        assert.deepEqual(fs.readFileSync(gitLog, 'utf8').trim().split('\n'), steps.slice(0, ['fetch', 'checkout', 'merge'].indexOf(interruptedStep) + 1));
-        assert.notInclude(result.stdout, 'stashing');
-      });
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-checkout-test-')); upstream = path.join(root, 'source'); installed = path.join(root, 'installed'); fs.mkdirSync(upstream);
+    git(upstream, ['init', '-q', '-b', 'main']);
+    fs.writeFileSync(path.join(upstream, '.gitignore'), 'ballin.config.json\n.backup-cache\n.analytics\n');
+    for (const entry of ['install.sh', 'quickstart.sh', 'commands/repo_update.ts', 'commands/install_setup.ts', 'bin/ballin']) {
+      const file = path.join(upstream, entry); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'fixture\n');
     }
-  }
-
-  it('prints usage and fails when the repository path is missing', () => {
-    const result = spawnSync(process.execPath, [repoUpdatePath], { encoding: 'utf8' });
-
-    assert.equal(result.status, 1);
-    assert.equal(result.stdout, 'Usage: repo_update.ts <repo-dir>\n');
-    assert.equal(result.stderr, '');
+    fs.writeFileSync(path.join(upstream, 'package.json'), JSON.stringify({ ballin: { installerProtocol: 2 }, engines: { node: '>=24.12' } }));
+    fs.writeFileSync(path.join(upstream, 'content'), 'before'); git(upstream, ['add', '.']); git(upstream, ['commit', '-qm', 'before']); before = git(upstream, ['rev-parse', 'HEAD']);
+    git(root, ['clone', '-q', upstream, installed]); git(installed, ['remote', 'set-url', 'origin', 'https://github.com/JBallin/ballin-scripts.git']);
+    fs.writeFileSync(path.join(upstream, 'content'), 'after'); git(upstream, ['commit', '-qam', 'after']); target = git(upstream, ['rev-parse', 'HEAD']); git(upstream, ['tag', 'v1.0.0']);
+    fs.writeFileSync(path.join(installed, 'ballin.config.json'), '{"preserve":true}'); fs.mkdirSync(path.join(installed, '.analytics')); fs.writeFileSync(path.join(installed, '.analytics/install-id'), 'preserved');
+    preload = path.join(root, 'network.cjs');
+    fs.writeFileSync(preload, `const cp=require('child_process'),original=cp.spawnSync;cp.spawnSync=function(command,args,options){if(command==='git'&&args[0]==='fetch'){require('fs').appendFileSync(${JSON.stringify(path.join(root, 'fetches'))},args.join(' ')+'\\n');if(process.env.FIXTURE_FETCH_STATUS)return {status:Number(process.env.FIXTURE_FETCH_STATUS),stderr:'fixture failure'};args=args.map(a=>a==='https://github.com/JBallin/ballin-scripts.git'?${JSON.stringify(upstream)}:a);}return original(command,args,options);};require('tty').isatty=()=>process.env.FIXTURE_TTY==='1';`);
   });
-
-  it('returns failure and stops before checkout when fetching the installed repository fails', () => {
-    fs.writeFileSync(path.join(binDir, 'git'), `#!/bin/sh
-printf '%s\\n' "$*" >> "$FAKE_GIT_LOG"
-exit 1
-`, { mode: 0o755 });
-    const result = spawnSync(process.execPath, [repoUpdatePath, installedRepo], {
-      encoding: 'utf8', env: testChildEnvironment({ PATH: binDir, FAKE_GIT_LOG: gitLog }),
-    });
-    assert.equal(result.status, 1);
-    assert.equal(result.stdout, 'git fetch origin main failed\n');
-    assert.equal(result.stderr, '');
-    assert.deepEqual(fs.readFileSync(gitLog, 'utf8').trim().split('\n'), ['fetch origin +main:refs/remotes/origin/main']);
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+  const run = (options: { sha?: string; kind?: string; value?: string; minimum?: string; mode?: string; input?: string; env?: NodeJS.ProcessEnv; fresh?: boolean } = {}) => spawnSync(process.execPath, [helper, 'apply', installed, options.kind || 'sha', options.value || options.sha || target, options.sha || target, options.minimum || '24.12.0', options.kind === 'release' ? '123' : '-', options.mode || 'install', String(options.fresh ?? false)], {
+    encoding: 'utf8', input: options.input ?? 'yes\n', env: testChildEnvironment({ HOME: root, PATH: process.env.PATH, NODE_OPTIONS: `--require=${preload}`, FIXTURE_TTY: '1', ...options.env }), timeout: 10000,
   });
-
-  it('updates an installed repository through the direct CLI with stubbed git', () => {
-    const result = spawnSync(process.execPath, [repoUpdatePath, installedRepo], {
-      encoding: 'utf8',
-      env: {
-        PATH: binDir,
-        FAKE_GIT_LOG: gitLog,
-      },
-    });
-
+  it('checks out exactly the selected SHA and preserves local data', () => {
+    const r = run(); assert.equal(r.status, 0, r.stdout + r.stderr); assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
+    assert.include(r.stdout, `Selected commit ${target.slice(0, 12)}\n`); assert.notInclude(r.stdout, target);
+    assert.include(r.stdout, `→ commit ${target.slice(0, 12)}\n`);
+    assert.equal(fs.readFileSync(path.join(installed, 'ballin.config.json'), 'utf8'), '{"preserve":true}'); assert.equal(fs.readFileSync(path.join(installed, '.analytics/install-id'), 'utf8'), 'preserved');
+    const receipt = JSON.parse(fs.readFileSync(path.join(installed, '.git/ballin-install.json'), 'utf8')); assert.equal(receipt.kind, 'sha'); assert.equal(receipt.sha, target);
+  });
+  for (const kind of ['sha', 'branch']) it(`labels unchanged ${kind} without a redundant transition`, () => {
+    const value = kind === 'sha' ? before : 'main';
+    fs.writeFileSync(path.join(installed, '.git/ballin-install.json'), JSON.stringify({kind, value, sha: before, minimumNode: '24.12.0', releaseId: '-'}));
+    const result = run({kind, value, sha: before, mode: 'self-update'});
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, '');
-    assert.deepEqual(fs.readFileSync(gitLog, 'utf8').trim().split('\n'), [
-      'fetch origin +main:refs/remotes/origin/main',
-      'checkout main',
-      'merge origin/main',
-    ]);
+    assert.include(result.stdout, '(unchanged)');
+    assert.notInclude(result.stdout, '→');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+    assert.include(result.stdout, 'Selected ');
+  });
+  for (const scenario of [
+    ['stable', 'release', 'v1.0.0', 'release', 'v1.1.0'],
+    ['major', 'release', 'v1.0.0', 'release', 'v2.0.0'],
+    ['downgrade', 'release', 'v2.0.0', 'release', 'v1.0.0'],
+    ['main fast-forward', 'branch', 'main', 'branch', 'main'],
+    ['release to commit', 'release', 'v1.0.0', 'sha', ''],
+    ['commit to release', 'sha', '', 'release', 'v1.0.0'],
+    ['branch to commit', 'branch', 'feature/synthetic', 'sha', ''],
+    ['commit to branch', 'sha', '', 'branch', 'feature/synthetic'],
+    ['missing provenance', 'missing', '', 'branch', 'main'],
+    ['stale provenance', 'stale', '', 'branch', 'main'],
+    ['same-SHA selection', 'sha', '', 'branch', 'main'],
+  ]) it(`shows verified identities in the ${scenario[0]} confirmation`, () => {
+    const [name, fromKind, fromValue, toKind, toValue] = scenario;
+    const selected = name === 'same-SHA selection' ? before : target;
+    if (fromKind !== 'missing') {
+      if (fromKind === 'release') git(installed,['tag',fromValue,before]);
+      const kind = fromKind === 'stale' ? 'branch' : fromKind;
+      fs.writeFileSync(path.join(installed,'.git/ballin-install.json'),JSON.stringify({kind,value:kind==='sha'?before:fromValue||'main',sha:fromKind==='stale'?target:before,minimumNode:'24.12.0',releaseId:kind==='release'?'123':'-'}));
+    }
+    if (toKind === 'release' && toValue !== 'v1.0.0') git(upstream,['tag',toValue,target]);
+    const label=(kind:string,value:string,sha:string)=>kind==='release'?value:kind==='branch'?`branch ${value} (${sha.slice(0,12)})`:kind==='sha'?`commit ${sha.slice(0,12)}`:`development ${sha.slice(0,12)}`;
+    const r=run({kind:toKind,value:toKind==='sha'?selected:toValue,sha:selected,mode:'self-update'});
+    assert.equal(r.status,0,r.stdout+r.stderr);
+    assert.include(r.stdout,`Ballin: ${label(fromKind,fromValue,before)} → ${label(toKind,toValue,selected)}\n`);
+    assert.include(r.stdout,`Selected ${label(toKind,toValue,selected)}\n`);
+    const automaticCompatible=name==='stable'||name==='main fast-forward';
+    assert.equal(r.stdout.includes('Change the installed revision/track?'),!automaticCompatible);
+    assert.equal(r.stdout.includes('Release notes:'),toKind==='release');
+    const receipt=JSON.parse(fs.readFileSync(path.join(installed,'.git/ballin-install.json'),'utf8'));
+    assert.equal(receipt.sha,selected); assert.equal(receipt.kind,toKind); assert.lengthOf(receipt.sha,40);
+  });
+
+  it('installs into a fresh clone without checking out its default branch first', () => {
+    installed = path.join(root, 'fresh'); git(root, ['clone', '-q', '--no-checkout', upstream, installed]);
+    git(installed, ['remote', 'set-url', 'origin', 'https://github.com/JBallin/ballin-scripts.git']);
+    assert.isFalse(fs.existsSync(path.join(installed, 'content')));
+    const r = run({ fresh: true, input: '' }); assert.equal(r.status, 0, r.stderr);
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), target); assert.equal(fs.readFileSync(path.join(installed, 'content'), 'utf8'), 'after');
+    assert.notInclude(r.stdout, 'Change the installed revision');
+  });
+  it('refuses a fetched incompatible contract before changing HEAD', () => {
+    fs.writeFileSync(path.join(upstream, 'package.json'), JSON.stringify({ ballin: { installerProtocol: '2' }, engines: { node: '>=24.12' } }));
+    git(upstream, ['commit', '-qam', 'incompatible contract']);
+    const r = run({ sha: git(upstream, ['rev-parse', 'HEAD']) }); assert.equal(r.status, 1); assert.include(r.stderr, 'contract changed or is unsupported');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+  });
+  it('exposes read-only inspection and rejects unknown CLI actions', () => {
+    const env = testChildEnvironment({ HOME: root, PATH: process.env.PATH, NODE_OPTIONS: `--require=${preload}` });
+    for (const action of ['inspect', 'unknown']) {
+      const r = spawnSync(process.execPath, [helper, action, installed], { encoding: 'utf8', env });
+      assert.equal(r.status, action === 'inspect' ? 0 : 1, r.stderr);
+      if (action === 'unknown') assert.include(r.stderr, 'Usage:');
+    }
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.isFalse(fs.existsSync(path.join(root, 'fetches')));
+  });
+  for (const input of ['no\n', '', 'y', 'yes' + ' '.repeat(40) + 'no\n']) it(`refuses an unconfirmed transition (${JSON.stringify(input)})`, () => {
+    const r = run({ input }); assert.equal(r.status, 20); assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.include(r.stdout, 'cancelled'); assert.notInclude(r.stderr, 'cancelled');
+  });
+  for (const input of ['maybe\nyes\n', 'yes' + ' '.repeat(40) + 'no\nyes\n']) {
+    it(`reprompts a completed invalid revision answer before a confirmed transition (${JSON.stringify(input)})`, () => {
+      const r = run({ input });
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+      assert.include(r.stdout, 'Enter Yes or No.');
+      assert.equal(r.stdout.split('Change the installed revision/track?').length - 1, 2);
+      assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
+      assert.notInclude(r.stdout, 'cancelled');
+    });
+  }
+  for (const [automatic, tty] of [['1', '0'], ['1', '1'], ['0', '0']]) it(`refuses track changes requiring consent without checkout changes (automatic ${automatic}, TTY ${tty})`, () => {
+    const r = run({ env: { BALLIN_AUTOMATIC_UPDATE: automatic, FIXTURE_TTY: tty }, mode: 'self-update' }); assert.equal(r.status, 21); assert.isTrue(r.stderr.endsWith('Confirmation required. Run `ballin self-update` manually to continue.\n')); assert.notInclude(r.stderr, 'installer'); assert.notInclude(r.stdout, '[y/N]'); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+  });
+  for (const mode of ['tty', 'redirected', 'NO_COLOR', 'dumb']) it(`styles self-update recovery for the receiving stderr (${mode})`, () => {
+    fs.appendFileSync(preload, `Object.defineProperty(process.stderr,'isTTY',{value:${mode !== 'redirected'}}); Object.defineProperty(process.stdout,'isTTY',{value:${mode === 'redirected'}});`);
+    const r = run({ mode:'self-update', env:{ BALLIN_AUTOMATIC_UPDATE:'1',TERM:mode==='dumb'?'dumb':'xterm',...(mode==='NO_COLOR'?{NO_COLOR:'1'}:{})} });
+    assert.equal(r.status,21); assert.notInclude(r.stdout,'manually to continue');
+    assert.isTrue(r.stderr.endsWith(mode==='tty' ? 'Confirmation required. Run \x1b[1mballin self-update\x1b[0m manually to continue.\n' : 'Confirmation required. Run `ballin self-update` manually to continue.\n'));
+    assert.equal(git(installed,['rev-parse','HEAD']),before);
+  });
+  it('refuses noninteractive revision changes even with affirmative input', () => {
+    const r = run({ env: { FIXTURE_TTY: '0' }, input: 'yes\n' }); assert.equal(r.status, 21); assert.include(r.stderr, 'requires confirmation');
+    assert.include(r.stderr, 'The requested revision was not applied.');
+    assert.include(r.stderr, 'cannot select an explicit revision');
+    assert.notInclude(r.stderr, 'Run `ballin self-update` interactively');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+  });
+  it('rejects inconsistent selected runtime metadata before changing checkout', () => {
+    const r = run({ minimum: '24.12.1' }); assert.equal(r.status, 1); assert.include(r.stderr, 'contract changed or is unsupported');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+  });
+  it('reports an unavailable updater launcher without changing checkout', () => {
+    const r = spawnSync(process.execPath, ['-e', `require(${JSON.stringify(helper)}).updateInstalledRepo(process.argv[1])`, installed], {
+      encoding: 'utf8', env: testChildEnvironment({ HOME: root, PATH: '', NODE_OPTIONS: `--require=${preload}` }),
+    });
+    assert.equal(r.status, 1); assert.include(r.stderr, 'Unable to start the installed updater');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.isFalse(fs.existsSync(path.join(root, 'fetches')));
+  });
+  it('checks minimum runtime before fetching or changing HEAD', () => {
+    const r = run({ minimum: '999.0.0' }); assert.equal(r.status, 1); assert.include(r.stderr, 'requires Node.js'); assert.isFalse(fs.existsSync(path.join(root, 'fetches'))); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+  });
+  it('refuses dirty checkout without fetching or stashing', () => {
+    fs.writeFileSync(path.join(installed, 'content'), 'user work'); const r = run(); assert.equal(r.status, 1); assert.isFalse(fs.existsSync(path.join(root, 'fetches'))); assert.equal(fs.readFileSync(path.join(installed, 'content'), 'utf8'), 'user work');
+  });
+  it('rejects replacement refs before fetching and never reports replacement content as a release', () => {
+    git(installed, ['fetch', '-q', upstream, target]); git(installed, ['replace', before, target]);
+    const r = run(); assert.equal(r.status, 1); assert.include(r.stderr, 'replacement refs'); assert.isFalse(fs.existsSync(path.join(root, 'fetches')));
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.equal(fs.readFileSync(path.join(installed, 'content'), 'utf8'), 'before');
+    git(installed, ['tag', 'v1.0.0', before]);
+    fs.writeFileSync(path.join(installed, '.git/ballin-install.json'), JSON.stringify({ kind: 'release', value: 'v1.0.0', sha: before, minimumNode: '24.12.0', releaseId: '123' }));
+    assert.equal(require('../commands/repo_update.ts').readIdentity(installed).version, 'development');
+  });
+  it('refuses missing required setup before changing checkout or receipt', () => {
+    git(upstream, ['rm', 'commands/install_setup.ts']); git(upstream, ['commit', '-qm', 'unsupported layout']);
+    const r = run({ sha: git(upstream, ['rev-parse', 'HEAD']) }); assert.equal(r.status, 1); assert.include(r.stderr, 'lacks a supported installer file');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.isFalse(fs.existsSync(path.join(installed, '.git/ballin-install.json')));
+  });
+  it('reports actual checkout and incomplete setup when receipt storage fails', () => {
+    fs.mkdirSync(path.join(installed, '.git/ballin-install.json'));
+    const r = run({ kind: 'branch', value: 'main', mode: 'self-update' }); assert.equal(r.status, 1); assert.include(r.stderr, `Checkout is now ${target}`); assert.include(r.stderr, 'setup is incomplete'); assert.include(r.stderr, 'run `ballin self-update`'); assert.notInclude(r.stderr, 'rerun the installer');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), target); assert.equal(require('../commands/repo_update.ts').readIdentity(installed).version, 'development');
+  });
+  it('reports fresh-install recovery when provenance fails without touching an existing installation', () => {
+    const existing = installed;
+    installed = path.join(root, 'fresh-provenance-failure');
+    git(root, ['clone', '-q', '--no-checkout', upstream, installed]);
+    fs.mkdirSync(path.join(installed, '.git/ballin-install.json'));
+    const result = run({ fresh: true, input: '' });
+
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, `Checkout is now ${target}`);
+    assert.include(result.stderr, 'installation provenance could not be saved and setup is incomplete');
+    assert.include(result.stderr, 'Inspect the Git metadata and rerun the installer.');
+    assert.notInclude(result.stderr, 'ballin self-update');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
+    assert.equal(fs.readFileSync(path.join(installed, 'content'), 'utf8'), 'after');
+    assert.isTrue(fs.statSync(path.join(installed, '.git/ballin-install.json')).isDirectory());
+    assert.isEmpty(fs.readdirSync(path.join(installed, '.git')).filter((name: string) => /^ballin-install\.json\..*\.tmp$/u.test(name)));
+    assert.equal(git(existing, ['rev-parse', 'HEAD']), before);
+    assert.equal(fs.readFileSync(path.join(existing, 'ballin.config.json'), 'utf8'), '{"preserve":true}');
+    assert.equal(fs.readFileSync(path.join(existing, '.analytics/install-id'), 'utf8'), 'preserved');
+  });
+  it('does not redirect failed explicit-selection provenance to a different revision', () => {
+    fs.mkdirSync(path.join(installed, '.git/ballin-install.json'));
+    const r = run(); assert.equal(r.status, 1);
+    assert.include(r.stderr, 'follows the default selection; it cannot restore an explicit selection');
+    assert.notInclude(r.stderr, 'rerun the installer');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
+  });
+  it('verifies the selected tag and records release provenance', () => {
+    const r = run({ kind: 'release', value: 'v1.0.0' }); assert.equal(r.status, 0, r.stderr); assert.equal(git(installed, ['rev-parse', 'v1.0.0^{commit}']), target);
+    assert.equal(require('../commands/repo_update.ts').readIdentity(installed).version, '1.0.0');
+    assert.include(r.stdout, 'Selected v1.0.0\n'); assert.notInclude(r.stdout, target);
+  });
+  it('refuses a conflicting local tag', () => {
+    git(installed, ['tag', 'v1.0.0']); const r = run({ kind: 'release', value: 'v1.0.0' }); assert.equal(r.status, 1); assert.include(r.stderr, 'conflicts'); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+  });
+  it('refuses a remote tag that moved after release resolution', () => {
+    git(upstream, ['tag', '-f', 'v1.0.0', before]);
+    const r = run({ kind: 'release', value: 'v1.0.0' }); assert.equal(r.status, 1); assert.include(r.stderr, 'tag moved');
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before); assert.isFalse(fs.existsSync(path.join(installed, '.git/ballin-install.json')));
+  });
+  it('fast-forwards main and explicitly permits a confirmed backward install', () => {
+    let r = run({ kind: 'branch', value: 'main' }); assert.equal(r.status, 0, r.stderr);
+    assert.include(r.stdout, `Selected branch main (${target.slice(0, 12)})\n`); assert.notInclude(r.stdout, target);
+    assert.equal(git(installed, ['symbolic-ref', 'HEAD']), 'refs/heads/main');
+    r = run({ kind: 'branch', value: 'main', sha: before }); assert.equal(r.status, 0, r.stderr);
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+    assert.equal(git(installed, ['rev-parse', 'refs/heads/main']), target);
+  });
+  it('refuses automatic main rewind and divergence without changing local work', () => {
+    assert.equal(run({ kind: 'branch', value: 'main' }).status, 0);
+    let r = run({ kind: 'branch', value: 'main', sha: before, mode: 'self-update' });
+    assert.equal(r.status, 1); assert.include(r.stderr, 'moved backward'); assert.include(r.stderr, 'retrying `ballin self-update`'); assert.notInclude(r.stderr, 'installer'); assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
+    git(upstream, ['checkout', '-q', '--detach', before]); fs.writeFileSync(path.join(upstream, 'content'), 'different'); git(upstream, ['commit', '-qam', 'divergent']);
+    const divergent = git(upstream, ['rev-parse', 'HEAD']);
+    r = run({ kind: 'branch', value: 'main', sha: divergent, mode: 'self-update' });
+    assert.equal(r.status, 1); assert.include(r.stderr, 'diverged'); assert.equal(git(installed, ['rev-parse', 'HEAD']), target);
+  });
+  it('refuses an ignored user-data collision and preserves bytes', () => {
+    fs.writeFileSync(path.join(upstream, 'ballin.config.json'), 'incoming tracked file');
+    git(upstream, ['add', '-f', 'ballin.config.json']); git(upstream, ['commit', '-qm', 'collision']);
+    const r = run({ sha: git(upstream, ['rev-parse', 'HEAD']) }); assert.equal(r.status, 1);
+    assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
+    assert.equal(fs.readFileSync(path.join(installed, 'ballin.config.json'), 'utf8'), '{"preserve":true}');
+  });
+  it('does not silently equate a SHA install with the release on that commit', () => {
+    assert.equal(run({ kind: 'release', value: 'v1.0.0' }).status, 0);
+    assert.equal(run().status, 0);
+    assert.equal(require('../commands/repo_update.ts').readIdentity(installed).version, 'development');
+  });
+  for (const status of [1, 130, 143]) it(`preserves fetch failure/interruption ${status}`, () => {
+    const r = run({ env: { FIXTURE_FETCH_STATUS: String(status) } }); assert.equal(r.status, status); assert.equal(git(installed, ['rev-parse', 'HEAD']), before);
   });
 });

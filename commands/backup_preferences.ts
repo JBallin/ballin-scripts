@@ -1,7 +1,8 @@
-const { displayPath, terminalPath, terminalProse } = require('./terminalStyle.ts');
+const { displayPath, terminalPath, terminalProse, terminalCommand, terminalError } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const { stringify } = require('../config/store.ts');
+const { configurationPath, filesystemCause } = require('../config/diagnostics.ts');
 const { snapshotDefinitions } = require('./backup_snapshots.ts');
 const { readYesNo, writeStdoutLine: writeRawStdoutLine } = require('./commandHelpers.ts');
 const writeStdoutLine = (text = ''): void => writeRawStdoutLine(terminalProse(text));
@@ -17,8 +18,12 @@ const saveBackupConfig = (configPath: string, config: Record<string, unknown>): 
     if (process.env.BALLIN_TEST_FAIL_FINAL_CONFIG_COMMIT === '1') throw new Error('Simulated final config commit failure');
     fs.renameSync(temporary, configPath);
     return true;
-  } catch {
-    writeStdoutLine('Unable to save backup configuration; the previous destination and local choices remain authoritative.');
+  } catch (error) {
+    writeStdoutLine(`\n${terminalError('Unable to save backup configuration; the previous destination and local choices remain authoritative.')}`);
+    writeRawStdoutLine(`Configuration file: ${configurationPath(configPath)}`);
+    const cause = filesystemCause(error);
+    if (cause) writeStdoutLine(cause);
+    writeStdoutLine(`Check write access to this file and its containing folder, and resolve any filesystem error above. Then run ${terminalCommand('ballin backup setup')} again.`);
     return false;
   } finally {
     if (created) {
@@ -85,8 +90,8 @@ const reviewSensitiveSources = (homeDir: string, env: NodeJS.ProcessEnv): boolea
 };
 // Selection and source review are shared; destination confirmation belongs to its caller.
 const selectSensitiveSources = (defaultIncluded = false): boolean | null | undefined => {
-  writeStdoutLine('⚠️  Inventories and filtered preferences can contain private information or secrets even without sensitive sources.');
-  writeStdoutLine('🔗 Backup source details:\nhttps://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
+  writeStdoutLine('! Backups may contain private information or secrets.');
+  writeStdoutLine('i Backup source details: getballin.com/docs/backup-sources.html#what-will-ballin-back-up');
   let reviewSucceeded = false;
   if (!process.env.HOME) writeStdoutLine('HOME is required to review sensitive sources.');
   else reviewSucceeded = reviewSensitiveSources(process.env.HOME, process.env);

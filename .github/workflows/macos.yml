@@ -1,0 +1,58 @@
+name: macOS CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Native macOS tests
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+          check-latest: true
+          cache: npm
+
+      - name: Report and verify native prerequisites
+        run: |
+          printf 'Runner image: %s (%s)\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
+          sw_vers
+          uname -a
+          id
+          node --version
+          npm --version
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          assert.equal(process.platform, 'darwin');
+          assert.equal(process.arch, 'arm64');
+          assert.ok(process.getgroups().includes(80), 'Homebrew fixtures require admin group membership');
+          assert.notEqual(process.getgid(), 80, 'Homebrew fixtures also require a non-admin primary group');
+          NODE
+          for tool in /usr/bin/plutil /bin/chmod /bin/stty /bin/bash /bin/zsh; do
+            test -x "$tool"
+          done
+          /bin/bash --version
+          /bin/zsh --version
+          command -v zsh
+          zsh --version
+          zsh -fc 'zmodload zsh/zpty && zmodload zsh/zselect && zmodload zsh/datetime'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test NVM, platform parsing, and prompts
+        run: >-
+          npm run test:unit -- --no-parallel --forbid-pending --fail-zero
+          test/nvm.test.ts test/onboarding_plutil.test.ts test/prompt_input.test.ts

@@ -12,8 +12,15 @@ describe('doctor literal recovery guidance', () => {
       assert.notInclude(formatted, 'github.com');
     }
   });
+  it('does not recommend a destructive reset for a readable config missing analytics', () => {
+    const report = { status: 'warn', checks: [{ id: 'config.read', label: 'Config readability', status: 'warn', summary: 'Config is readable but missing sections: `analytics`.' }] };
+    for (const output of [formatDefaultDoctorReport(report), formatVerboseDoctorReport(report)]) {
+      assert.include(output, 'preserving saved settings and backup linkage');
+      assert.notInclude(output, 'config reset');
+    }
+  });
   const cases = {
-    'config.read': 'Run `ballin config reset` to recreate the config.',
+    'config.read': 'Repair the reported config problem while preserving saved settings and backup linkage, then rerun `ballin doctor`.',
     'backup.read': 'Resolve the reported error, then rerun `ballin doctor`. Use `ballin backup setup` to revalidate the selected backup if needed.',
     'backup.config': 'Run `ballin backup disconnect`, then `ballin backup setup` to select a private repository.',
     'backup.consent': 'Set `backup.includeSensitive` to true or false; read-only recovery remains available.',
@@ -30,7 +37,7 @@ describe('doctor literal recovery guidance', () => {
       { id: 'config.read', label: 'Config', status: 'fail', summary: 'Unreadable.' },
       { id: 'backup.read', label: 'Backup', status: 'warn', summary: 'Unavailable.' },
     ] };
-    assert.equal(formatDefaultDoctorReport(report), 'ERROR Config: Unreadable.\nNext: Run `ballin config reset` to recreate the config.\n\nWARN  Backup: Unavailable.\nNext: Resolve the reported error, then rerun `ballin doctor`. Use `ballin backup setup` to revalidate the selected backup if needed.\n');
+    assert.equal(formatDefaultDoctorReport(report), 'ERROR Config: Unreadable.\nNext: Repair the reported config problem while preserving saved settings and backup linkage, then rerun `ballin doctor`.\n\nWARN  Backup: Unavailable.\nNext: Resolve the reported error, then rerun `ballin doctor`. Use `ballin backup setup` to revalidate the selected backup if needed.\n');
   });
 
   for (const mode of [
@@ -68,6 +75,21 @@ describe('doctor literal recovery guidance', () => {
         assert.equal(item.default, `ERROR Private backup readiness: ${summary}\nNext: ${next}\n`);
         assert.equal(item.verbose, `Ballin doctor\n\nERROR Private backup readiness: ${summary}\n      Next: ${next}\n\nResult: Ballin-managed environment has errors.\n`);
       }
+    });
+  }
+});
+
+describe('doctor checks without specific recovery instructions', () => {
+  for (const status of ['warn', 'fail']) {
+    it(`retains an unfamiliar ${status} check and supplies non-destructive fallback guidance`, () => {
+      const report = { status, checks: [{ id: 'future.check', label: 'Future check', status, summary: 'Inspect this condition.' }] };
+      const before = JSON.stringify(report);
+      for (const output of [formatDefaultDoctorReport(report), formatVerboseDoctorReport(report)]) {
+        assert.include(output, 'Future check: Inspect this condition.');
+        assert.include(output, 'Next: Review the check output above.');
+        assert.notInclude(output, 'reset');
+      }
+      assert.equal(JSON.stringify(report), before);
     });
   }
 });
