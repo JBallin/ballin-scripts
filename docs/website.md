@@ -11,6 +11,47 @@ preparation belongs to [Releasing Ballin](releasing.md); VM validation belongs t
 [Installation testing](installation-testing.md). The site does not change the
 installer's stable release selection or require gallery regeneration per release.
 
+## Review gallery changes in a PR
+
+For PRs that change gallery examples or their presentation, maintainers review
+local VM captures, rendered images and a complete-site preview before publication.
+Reuse unchanged captures and regenerate only affected examples. This is a manual
+review path; unrelated PRs need no gallery regeneration.
+
+Use the [VM recording recipe](../tools/output-gallery/README.md#import-actual-vm-recordings)
+for affected real journeys, [generate output](../tools/output-gallery/README.md#generate-review-output),
+then [review every image page](../tools/output-gallery/README.md#review-command-line-output)
+against its matching text and retained recording. Keep staged
+examples labeled as staged. Use the existing
+[packaging](../tools/output-gallery/README.md#package-approved-examples) or
+[selected replacement](../tools/output-gallery/README.md#replace-selected-examples)
+recipe, with its file-publication approval requirements, and
+[preview the complete candidate locally](../tools/output-gallery/README.md#preview-a-candidate-bundle).
+Follow [Website QA](#website-qa) on that rendered snapshot.
+
+In the PR, link the reviewed examples and permitted evidence, and record:
+
+- The exact product/capture SHAs and site/tooling SHA, including any local edits;
+  identify actual versus staged output and disclose omissions or normalization.
+- The candidate ZIP name, size and SHA-256, its base pin and replaced/retained IDs
+  for a refresh, and the matching snapshot's `build.json`.
+- The preview URL, reviewed entries and observed results, plus blocked checks.
+  Identify a loopback URL as local-only and say which checkout/snapshot it serves;
+  provide only approved screenshots/text in the PR and keep private raw recordings
+  and manifests in local evidence.
+
+Local candidate preview is available before upload. Hosted previews require the
+separate [Netlify setup and authorization](#deploy-and-recover); the workflow
+builds the selected ref's committed `site/bundle.json`, retrieving its pinned
+published bundle in release mode. It cannot accept an arbitrary local candidate
+ZIP. The current bootstrap pin produces no gallery. State which preview was
+actually reviewed and whether a hosted preview is available; a workflow file or
+local URL does not establish a shared preview.
+
+PR review does not upload assets, activate a production pin or deploy the site.
+Continue with the separately authorized release and activation workflow below
+when the candidate is ready.
+
 ## Start-to-finish workflow
 
 Follow this route directly or delegate it. Reuse existing specific approvals;
