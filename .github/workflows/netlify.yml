@@ -109,6 +109,9 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: .nvmrc
+      # Resolve only the reviewed tree, before exposing deployment credentials.
+      - name: Install locked deploy CLI
+        run: npm ci --prefix tools/site/netlify-cli --ignore-scripts
       - name: Deploy complete snapshot
         working-directory: ${{ runner.temp }}
         env:
@@ -121,7 +124,7 @@ jobs:
           test -n "$NETLIFY_SITE_ID"
           args=()
           if [[ "$TARGET" == production ]]; then args+=(--prod); fi
-          npx --yes --package=netlify-cli@27.16.2 netlify deploy \
+          "$GITHUB_WORKSPACE/tools/site/netlify-cli/node_modules/.bin/netlify" deploy \
             --no-build --dir "$RUNNER_TEMP/site-snapshot" \
             --site "$NETLIFY_SITE_ID" --message "$SITE_SOURCE" \
             --json "${args[@]}" > "$RUNNER_TEMP/netlify-deploy.json"

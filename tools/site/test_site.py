@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """Offline site/bundle contracts. Fixtures contain no actual capture data."""
 import contextlib
+import base64
 import copy
+import hashlib
 import io
 import functools
 import http.client
 import threading
 import json
+import os
 from pathlib import Path
 import stat
 import struct
 import subprocess
 import tempfile
+import tarfile
 import unittest
 from unittest import mock
 import zipfile
@@ -1059,7 +1063,7 @@ class BuildTests(unittest.TestCase):
         publish = next(step for step in deploy['steps'] if step.get('name') == 'Deploy complete snapshot')
         self.assertEqual(publish['working-directory'], '${{ runner.temp }}')
         self.assertIn('--no-build --dir "$RUNNER_TEMP/site-snapshot"', publish['run'])
-        self.assertIn('netlify-cli@27.16.2', publish['run'])
+        self.assertIn('"$GITHUB_WORKSPACE/tools/site/netlify-cli/node_modules/.bin/netlify" deploy', publish['run'])
         self.assertIn('if [[ "$TARGET" == production ]]; then args+=(--prod); fi', publish['run'])
         self.assertNotIn('deploy-pages', json.dumps(workflow))
         freshness_step = next(step for step in deploy['steps'] if step.get('name') == 'Refuse a superseded snapshot')
@@ -1074,6 +1078,117 @@ class BuildTests(unittest.TestCase):
         for name in ['SUPPORT.md', 'SECURITY.md']:
             self.assertIn('.github/' + name, freshness.split())
             self.assertNotIn(name, freshness.split())
+
+
+class DeployDependencyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        code = "const fs=require('node:fs'),yaml=require('js-yaml');process.stdout.write(JSON.stringify(yaml.load(fs.readFileSync('.github/workflows/netlify.yml','utf8'))));"
+        cls.workflow = json.loads(subprocess.check_output(['node', '-e', code], cwd=site.ROOT))
+        cls.steps = cls.workflow['jobs']['deploy']['steps']
+        cls.install = next(step for step in cls.steps if step['name'] == 'Install locked deploy CLI')
+        cls.publish = next(step for step in cls.steps if step['name'] == 'Deploy complete snapshot')
+
+    def test_only_installed_reviewed_tree_receives_credentials(self):
+        self.assertNotIn('env', self.workflow)
+        self.assertNotIn('env', self.workflow['jobs']['deploy'])
+        self.assertLess(self.steps.index(self.install), self.steps.index(self.publish))
+        checkout = next(step for step in self.steps if step['name'] == 'Check current publication inputs')
+        self.assertEqual(checkout['with']['ref'], 'main')
+        self.assertLess(self.steps.index(checkout), self.steps.index(self.install))
+        for step in self.steps:
+            if step is not self.publish:
+                self.assertNotIn('NETLIFY_AUTH_TOKEN', json.dumps(step))
+                self.assertNotIn('NETLIFY_SITE_ID', json.dumps(step))
+        self.assertEqual(self.install['run'], 'npm ci --prefix tools/site/netlify-cli --ignore-scripts')
+        self.assertNotIn('npx', self.publish['run'])
+        self.assertNotIn('npm ', self.publish['run'])
+        package = json.loads((site.ROOT / 'tools/site/netlify-cli/package.json').read_text())
+        lock = json.loads((site.ROOT / 'tools/site/netlify-cli/package-lock.json').read_text())
+        self.assertTrue(package['private'])
+        self.assertEqual(package['dependencies'], {'netlify-cli': '27.16.2'})
+        self.assertEqual(lock['lockfileVersion'], 3)
+        self.assertEqual(lock['packages']['']['dependencies'], package['dependencies'])
+        self.assertEqual(lock['packages']['node_modules/netlify-cli']['version'], '27.16.2')
+        for name, record in lock['packages'].items():
+            if name:
+                with self.subTest(package=name):
+                    self.assertTrue(record['resolved'].startswith('https://registry.npmjs.org/'))
+                    self.assertTrue(record['integrity'].startswith('sha512-'))
+                    self.assertNotIn('link', record)
+
+    def test_install_blocks_lifecycle_code_and_tampered_package(self):
+        # Exercise the workflow's real npm command against a local hostile package.
+        # No network, Netlify credentials, or user configuration is involved.
+        for tampered in [False, True]:
+            with self.subTest(tampered=tampered), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                package_dir = root / 'tools/site/netlify-cli'
+                package_dir.mkdir(parents=True)
+                malicious = {'name': 'hostile-fixture', 'version': '1.0.0', 'scripts': {
+                    name: 'node -e "require(\'fs\').writeFileSync(process.env.HOME+\'/executed\', \'unsafe\')"'
+                    for name in ['preinstall', 'install', 'postinstall']}}
+                tarball = package_dir / 'fixture.tgz'
+                def write_tar(value):
+                    data = json.dumps(value).encode()
+                    with tarfile.open(tarball, 'w:gz') as archive_file:
+                        info = tarfile.TarInfo('package/package.json')
+                        info.size = len(data)
+                        archive_file.addfile(info, io.BytesIO(data))
+                write_tar(malicious)
+                integrity = 'sha512-' + base64.b64encode(hashlib.sha512(tarball.read_bytes()).digest()).decode()
+                package = {'name': 'deploy-fixture', 'version': '1.0.0', 'dependencies': {'hostile-fixture': 'file:fixture.tgz'}}
+                (package_dir / 'package.json').write_text(json.dumps(package))
+                (package_dir / 'package-lock.json').write_text(json.dumps({
+                    'name': 'deploy-fixture', 'version': '1.0.0', 'lockfileVersion': 3,
+                    'packages': {'': package, 'node_modules/hostile-fixture': {
+                        'version': '1.0.0', 'resolved': 'file:fixture.tgz', 'integrity': integrity,
+                        'hasInstallScript': True}}}))
+                if tampered:
+                    write_tar({**malicious, 'description': 'substituted bytes'})
+                env = {'PATH': os.environ['PATH'], 'HOME': folder, 'TMPDIR': folder,
+                       'npm_config_cache': str(root / 'cache'), 'npm_config_offline': 'true',
+                       'npm_config_userconfig': str(root / 'user.npmrc'),
+                       'npm_config_globalconfig': str(root / 'global.npmrc')}
+                result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', self.install['run']],
+                                        cwd=root, env=env, capture_output=True, text=True, timeout=60)
+                self.assertFalse((root / 'executed').exists())
+                if tampered:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('EINTEGRITY', result.stderr)
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertTrue((package_dir / 'node_modules/hostile-fixture/package.json').exists())
+
+    def test_static_publication_uses_only_local_binary(self):
+        for target in ['preview', 'production']:
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                workspace = root / 'checkout with spaces'
+                binary = workspace / 'tools/site/netlify-cli/node_modules/.bin/netlify'
+                binary.parent.mkdir(parents=True)
+                binary.write_text('#!/usr/bin/env node\n' +
+                                  "require('fs').writeFileSync(process.env.HOME+'/invocation.json', JSON.stringify({args:process.argv.slice(2),cwd:process.cwd(),token:process.env.NETLIFY_AUTH_TOKEN}));\n")
+                binary.chmod(0o755)
+                snapshot = root / 'site-snapshot'
+                snapshot.mkdir()
+                (snapshot / 'index.html').write_text('approved static fixture')
+                env = {'PATH': os.environ['PATH'], 'HOME': folder, 'TMPDIR': folder,
+                       'GITHUB_WORKSPACE': str(workspace), 'RUNNER_TEMP': folder,
+                       'NETLIFY_AUTH_TOKEN': 'synthetic-token', 'NETLIFY_SITE_ID': 'synthetic-site',
+                       'SITE_SOURCE': 'a' * 40, 'TARGET': target}
+                command = ['bash', '-e', '-o', 'pipefail', '-c', self.publish['run']]
+                result = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                invocation = json.loads((root / 'invocation.json').read_text())
+                expected = ['deploy', '--no-build', '--dir', str(snapshot), '--site', 'synthetic-site',
+                            '--message', 'a' * 40, '--json'] + (['--prod'] if target == 'production' else [])
+                self.assertEqual(invocation, {'args': expected, 'cwd': str(root.resolve()), 'token': 'synthetic-token'})
+                self.assertEqual((snapshot / 'index.html').read_text(), 'approved static fixture')
+                binary.unlink()
+                # A missing installed CLI must fail rather than fetching a replacement.
+                result = subprocess.run(command, cwd=root, env=env, capture_output=True, text=True, timeout=10)
+                self.assertNotEqual(result.returncode, 0)
 
 
 if __name__ == '__main__':

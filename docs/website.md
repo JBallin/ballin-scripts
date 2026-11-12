@@ -477,7 +477,11 @@ fragments when publishing or changing public links. Keep the README self-contain
 ## Deploy and recover
 
 `.github/workflows/netlify.yml` builds and uploads one complete snapshot, then
-publishes only that artifact with a pinned Netlify CLI. A docs change reuses the
+publishes only that artifact with an integrity-locked Netlify CLI. The dedicated
+`tools/site/netlify-cli/package-lock.json` records its dependency tree. The deploy
+job installs it from current `main` with `npm ci --ignore-scripts` before exposing
+Netlify credentials, then invokes the installed binary outside the checkout.
+Review the complete lockfile when updating the CLI. A docs change reuses the
 pinned bundle; a bundle-pin change includes current docs. Gallery generation and
 asset approval stay local. GitHub Pages deployment and its write/OIDC permissions
 are removed. No Netlify Git integration or automatic PR previews are needed.
