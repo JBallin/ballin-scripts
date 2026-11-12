@@ -6,6 +6,9 @@ const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 const { testChildEnvironment } = require('./helpers/environment.ts');
 
+// Executable-backed NVM fixtures must describe the runtime they actually run.
+const nvmVersion = process.version;
+
 const terminalGuidanceMessage = '✓ Setup complete.\nOpen a new Terminal and run `ballin help`.';
 const terminalGuidance = `\n${terminalGuidanceMessage}\n`;
 
@@ -190,7 +193,7 @@ ${afterMain}
       assert.exists(target, `Fixture requires ${name}`);
       fs.symlinkSync(target, path.join(tools, name));
     }
-    fs.writeFileSync(path.join(root, 'nvm-source.sh'), 'nvm() {\n  local action=$1; shift\n  case "$action" in\n    version) [ -f "$NVM_DIR/versions/node/v26.13.0/bin/node" ] && printf \'v26.13.0\\n\' ;;\n    install)\n      printf \'nvm:install:%s\\n\' "$*" >> "$FAKE_COMMAND_LOG"\n      [[ "${FAKE_NVM_FAIL:-}" != install ]] || return 42\n      mkdir -p "$NVM_DIR/versions/node/v26.13.0/bin" "$NVM_DIR/alias/lts"\n      cp "$FAKE_ROOT/fake-tool" "$NVM_DIR/versions/node/v26.13.0/bin/node"\n      cp "$FAKE_ROOT/fake-tool" "$NVM_DIR/versions/node/v26.13.0/bin/npm"\n      printf \'v26.13.0\\n\' > "$NVM_DIR/alias/lts/*"\n      [[ -e "$NVM_DIR/alias/default" ]] || printf \'lts/*\\n\' > "$NVM_DIR/alias/default"\n      export PATH="$NVM_DIR/versions/node/v26.13.0/bin:$PATH"\n      ;;\n    alias) printf \'nvm:alias:%s\\n\' "$*" >> "$FAKE_COMMAND_LOG"; printf \'%s\\n\' "$2" > "$NVM_DIR/alias/$1" ;;\n    use)\n      printf \'nvm:use:%s\\n\' "$*" >> "$FAKE_COMMAND_LOG"\n      export PATH="$NVM_DIR/versions/node/v26.13.0/bin:$PATH"\n      ;;\n    *) return 97 ;;\n  esac\n}\nif [[ "${1:-}" != --no-use ]]; then nvm use default; fi\n');
+    fs.writeFileSync(path.join(root, 'nvm-source.sh'), `nvm() {\n  local action=$1; shift\n  case "$action" in\n    version) [ -f "$NVM_DIR/versions/node/${nvmVersion}/bin/node" ] && printf '${nvmVersion}\\n' ;;\n    install)\n      printf 'nvm:install:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"\n      [[ "\${FAKE_NVM_FAIL:-}" != install ]] || return 42\n      mkdir -p "$NVM_DIR/versions/node/${nvmVersion}/bin" "$NVM_DIR/alias/lts"\n      cp "$FAKE_ROOT/fake-tool" "$NVM_DIR/versions/node/${nvmVersion}/bin/node"\n      cp "$FAKE_ROOT/fake-tool" "$NVM_DIR/versions/node/${nvmVersion}/bin/npm"\n      printf '${nvmVersion}\\n' > "$NVM_DIR/alias/lts/*"\n      [[ -e "$NVM_DIR/alias/default" ]] || printf 'lts/*\\n' > "$NVM_DIR/alias/default"\n      export PATH="$NVM_DIR/versions/node/${nvmVersion}/bin:$PATH"\n      ;;\n    alias) printf 'nvm:alias:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"; printf '%s\\n' "$2" > "$NVM_DIR/alias/$1" ;;\n    use)\n      printf 'nvm:use:%s\\n' "$*" >> "$FAKE_COMMAND_LOG"\n      export PATH="$NVM_DIR/versions/node/${nvmVersion}/bin:$PATH"\n      ;;\n    *) return 97 ;;\n  esac\n}\nif [[ "\${1:-}" != --no-use ]]; then nvm use default; fi\n`);
     fs.writeFileSync(path.join(root, 'nvm-install.sh'), '#!/bin/bash\nset -eu\n[[ "$PROFILE" == /dev/null && "${NVM_SOURCE:-}" == "" && "${NODE_VERSION:-}" == "" ]] || exit 96\nmkdir -p "$NVM_DIR"\ncp "$FAKE_ROOT/nvm-source.sh" "$NVM_DIR/nvm.sh"\n');
     const ghBytes = 'Synthetic official GitHub CLI archive\n';
     fs.writeFileSync(path.join(root, 'gh.zip'), ghBytes);
@@ -462,6 +465,16 @@ esac
     assert.notInclude(result.stdout, "Homebrew's instructions above are for manual setup.");
     assert.notInclude(result.stdout, 'Setup complete.');
   });
+  it('refuses an NVM default that differs from the active runtime', () => {
+    const fixture = path.join(root, 'nvm-source.sh');
+    fs.writeFileSync(fixture, fs.readFileSync(fixture, 'utf8').replace(
+      `printf '${nvmVersion}\\n'`, "printf 'v0.0.0\\n'",
+    ));
+    const result = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n' });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /NVM default and active Node(?:\.js)? differ/u);
+    assert.notInclude(readLog(), '/main/install.sh');
+  });
   for (const shell of ['bash', 'zsh']) {
     it(`initializes fresh Homebrew compatibility links once and loads libexec in a new ${shell}`, () => {
       const prefix = nativeBrew(); const nvm = path.join(home, '.nvm');
@@ -482,7 +495,7 @@ esac
         encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: tools, FAKE_ROOT: root, FAKE_COMMAND_LOG: log }),
       });
       assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
-      assert.include(fresh.stdout, path.join(nvm, 'versions/node/v26.13.0/bin/node'));
+      assert.include(fresh.stdout, path.join(nvm, `versions/node/${nvmVersion}/bin/node`));
       assert.isFalse(fs.existsSync(path.join(nvm, 'nvm-exec')));
       fs.symlinkSync(path.join(prefix, 'opt/nvm/libexec/nvm-exec'), path.join(nvm, 'nvm-exec'));
       const execResult = spawnSync(path.join(nvm, 'nvm-exec'), ['/bin/echo', 'compatible'], {
@@ -490,7 +503,7 @@ esac
       });
       assert.equal(execResult.status, 0, execResult.stderr); assert.equal(execResult.stdout, 'compatible\n');
       const rerun = run('y\ny\n', { ...environment, FAKE_MISSING_NODE: '0',
-        PATH: `${nvm}/versions/node/v26.13.0/bin:${environment.PATH}` });
+        PATH: `${nvm}/versions/node/${nvmVersion}/bin:${environment.PATH}` });
       assert.equal(rerun.status, 0, rerun.stdout + rerun.stderr);
       assert.notInclude(readLog(), 'homebrew-wrapper-loaded');
       assert.equal(fs.readFileSync(profile, 'utf8').split('# NVM (Ballin Quickstart)').length - 1, 1);
@@ -562,7 +575,7 @@ esac
           FAKE_NATIVE_PREFIX: prefix, FAKE_ROOT: root, FAKE_COMMAND_LOG: log }),
       });
       assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
-      assert.include(fresh.stdout, path.join(home, '.nvm/versions/node/v26.13.0/bin/node'));
+      assert.include(fresh.stdout, path.join(home, `.nvm/versions/node/${nvmVersion}/bin/node`));
     });
   }
   for (const location of ['inherited', 'xdg']) for (const outcome of ['declined', 'blocked']) {
@@ -651,11 +664,11 @@ esac
     it(`rejects a peer-writable NVM working tree before its install can execute Node: ${unsafe}`, () => {
       const prefix = nativeBrew();
       const libexec = path.join(prefix, 'opt/nvm/libexec'); fs.mkdirSync(libexec, { recursive: true });
-      const nvm = path.join(home, '.nvm'); const bin = path.join(nvm, 'versions/node/v26.13.0/bin');
+      const nvm = path.join(home, '.nvm'); const bin = path.join(nvm, `versions/node/${nvmVersion}/bin`);
       fs.mkdirSync(bin, { recursive: true });
       const marker = path.join(root, 'executed-peer-node');
       fs.writeFileSync(path.join(bin, 'node'), `#!/bin/sh\nprintf compromised > '${marker}'\n`, { mode: 0o700 });
-      const script = fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8').replace('    install)\n', '    install)\n      "$NVM_DIR/versions/node/v26.13.0/bin/node"\n');
+      const script = fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8').replace('    install)\n', `    install)\n      "$NVM_DIR/versions/node/${nvmVersion}/bin/node"\n`);
       fs.writeFileSync(path.join(libexec, 'nvm.sh'), script);
       fs.writeFileSync(path.join(libexec, 'nvm-exec'), '#!/bin/sh\nexec \"$@\"\n', { mode: 0o755 });
       let selected = nvm;
@@ -681,8 +694,8 @@ esac
       const named: Record<string, string> = {
         versions: 'Unsafe owner or permissions: ~/.nvm/versions\n',
         cache: 'Unsafe owner or permissions: ~/.nvm/.cache/archive\n',
-        'node link': 'Unsafe owner or permissions: ~/.nvm/versions/node/v26.13.0/bin/node\n',
-        'nested link': 'Unsafe symlink or link target: ~/.nvm/versions/node/v26.13.0/bin/node\n',
+        'node link': `Unsafe owner or permissions: ~/.nvm/versions/node/${nvmVersion}/bin/node\n`,
+        'nested link': `Unsafe symlink or link target: ~/.nvm/versions/node/${nvmVersion}/bin/node\n`,
       };
       if (named[unsafe]) assert.include(result.stderr, named[unsafe]);
       assert.notInclude(readLog(), 'nvm:install:');
@@ -718,9 +731,9 @@ esac
     it(`keeps compatible Node by default with a linked ${linked} without changing NVM`, () => {
       const actual = path.join(root, 'existing-nvm'); fs.mkdirSync(path.join(actual, 'alias/lts'), { recursive: true });
       const original = path.join(actual, 'alias/default'); fs.writeFileSync(original, 'lts/*');
-      fs.writeFileSync(path.join(actual, 'alias/lts/*'), 'v26.13.0');
-      fs.mkdirSync(path.join(actual, 'versions/node/v26.13.0/bin'), { recursive: true });
-      fs.copyFileSync(path.join(root, 'fake-tool'), path.join(actual, 'versions/node/v26.13.0/bin/node'));
+      fs.writeFileSync(path.join(actual, 'alias/lts/*'), nvmVersion);
+      fs.mkdirSync(path.join(actual, `versions/node/${nvmVersion}/bin`), { recursive: true });
+      fs.copyFileSync(path.join(root, 'fake-tool'), path.join(actual, `versions/node/${nvmVersion}/bin/node`));
       const source = fs.readFileSync(path.join(root, 'nvm-source.sh'), 'utf8') + '\nprintf inspected > "$NVM_DIR/probe-write"\n';
       fs.writeFileSync(path.join(actual, 'nvm.sh'), source);
       const nvm = path.join(home, '.nvm');
@@ -758,7 +771,7 @@ esac
       assert.isTrue(fs.existsSync(path.join(old, 'node'))); assert.include(readLog(), 'nvm:alias:default lts/*');
       const environment = testChildEnvironment({ HOME: home, PATH: `${old}:${tools}`, FAKE_ROOT: root, FAKE_COMMAND_LOG: log, TEST_NODE_RUNTIME: process.execPath });
       const fresh = spawnSync('/bin/' + shell, shell === 'bash' ? ['--norc', '--login', '-c', 'command -v node'] : ['-d', '-i', '-c', 'command -v node'], { encoding: 'utf8', env: environment });
-      assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr); assert.include(fresh.stdout, path.join(nvm, 'versions/node/v26.13.0/bin/node'));
+      assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr); assert.include(fresh.stdout, path.join(nvm, `versions/node/${nvmVersion}/bin/node`));
     });
   }
   for (const shell of ['bash', 'zsh']) {
@@ -791,7 +804,7 @@ esac
         encoding: 'utf8', env: testChildEnvironment({ HOME: home, PATH: `${oldNode}:${tools}`, FAKE_ROOT: root, FAKE_COMMAND_LOG: log }),
       });
       assert.equal(fresh.status, 0, fresh.stdout + fresh.stderr);
-      assert.include(fresh.stdout, 'new-keg\n'); assert.include(fresh.stdout, path.join(nvm, 'versions/node/v26.13.0/bin/node'));
+      assert.include(fresh.stdout, 'new-keg\n'); assert.include(fresh.stdout, path.join(nvm, `versions/node/${nvmVersion}/bin/node`));
     });
   }
   for (const stable of ['missing', 'different']) {
