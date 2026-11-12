@@ -38,14 +38,20 @@ describe('onboarding sandbox', function() {
       env: { ...sandboxEnvironment(sandbox), NVM_DIR: directory, BALLIN_QA_NODE: hostNode }, encoding: 'utf8',
     });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    const installed = path.join(directory, 'versions/node/v26.13.0/bin/node');
+    const installed = path.join(directory, `versions/node/${process.version}/bin/node`);
     assert.isFalse(fs.lstatSync(installed).isSymbolicLink());
+    assert.equal(fs.readFileSync(path.join(directory, 'alias/lts/*'), 'utf8').trim(), process.version);
+    const resolved = spawnSync('/bin/bash', ['--noprofile', '--norc', '-c', '. "$1"; nvm version default; node --version', 'fixture', source], {
+      env: { ...sandboxEnvironment(sandbox), NVM_DIR: directory, PATH: `${path.dirname(installed)}:${sandboxEnvironment(sandbox).PATH}` }, encoding: 'utf8',
+    });
+    assert.equal(resolved.status, 0, resolved.stdout + resolved.stderr);
+    assert.equal(resolved.stdout, `${process.version}\n${process.version}\n`);
     assert.isTrue(require('../commands/nvm.ts').trustedNvmDirectory(directory, source));
     assert.equal(runNode('process.exit(0)').status, 0);
   });
   it('accepts only an unchanged private copy of the controlled NVM runtime', () => {
     cleanupSandbox(sandbox.root); sandbox = createSandbox({ quickstart: true });
-    const bin = path.join(sandbox.home, '.config/nvm/versions/node/v26.13.0/bin');
+    const bin = path.join(sandbox.home, `.config/nvm/versions/node/${process.version}/bin`);
     fs.mkdirSync(bin, { recursive: true });
     const node = path.join(bin, 'node'); fs.copyFileSync(process.execPath, node);
     assert.equal(runNode('process.exit(0)').status, 0);

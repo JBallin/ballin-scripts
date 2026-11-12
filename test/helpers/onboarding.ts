@@ -164,7 +164,8 @@ const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
       fs.writeFileSync(sandbox.quickstartEntry, entry.replaceAll('/usr/bin/plutil', "'" + parser.replaceAll("'", "'\\''") + "'"), { mode: 0o700 });
       for (const file of [parser, sandbox.quickstartEntry]) sandbox.expected.set(file, fs.readFileSync(file, 'utf8'));
       const nvmFixture = path.join(sandbox.root, 'nvm-fixture.sh');
-      fs.copyFileSync(path.join(__dirname, 'onboarding_nvm.sh'), nvmFixture);
+      fs.writeFileSync(nvmFixture, fs.readFileSync(path.join(__dirname, 'onboarding_nvm.sh'), 'utf8')
+        .replaceAll('__BALLIN_QA_NODE_VERSION__', process.version));
       fs.chmodSync(nvmFixture, 0o700);
       sandbox.expected.set(nvmFixture, fs.readFileSync(nvmFixture, 'utf8'));
       const nvmInstaller = path.join(sandbox.root, 'nvm-install.sh');
