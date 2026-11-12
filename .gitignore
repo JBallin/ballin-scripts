@@ -19,3 +19,4 @@ ballin.config.json
 /.site-output/
 /site/node_modules/
 /tools/site/__pycache__/
+/tools/site/netlify-cli/node_modules/
