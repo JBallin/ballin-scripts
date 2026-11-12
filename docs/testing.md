@@ -328,6 +328,15 @@ needed for their scenarios.
 Intentional exceptions and deliberately uncovered paths are recorded in the
 [coverage boundary ledger](coverage-boundaries.md).
 
+## Local output gallery
+
+Use the [on-demand output gallery](../tools/output-gallery/README.md) to review
+Terminal/ANSI output, polished AppKit PNGs and matching accessible text from one
+explicit source revision. Generated evidence stays local and ignored. Staged
+scenarios are labeled; they complement tests and do not establish live execution.
+Import separately recorded disposable-VM journeys with their raw output and
+provenance. The final stable-release documentation capture sequence is unchanged.
+
 ## Comparing coverage
 
 Rounded global percentages can conceal different branch totals. To compare
