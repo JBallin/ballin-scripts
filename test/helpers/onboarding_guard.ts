@@ -4,9 +4,17 @@ const path = require('path');
 const root = process.env.BALLIN_QA_ROOT;
 const fail = (): never => { throw new Error('Onboarding sandbox safeguard refused the operation'); };
 const quickstart = root && JSON.parse(fs.readFileSync(path.join(root, '.ballin-onboarding-sandbox.json'), 'utf8')).quickstart === true;
+const nvmBin = root && path.join(root, `home/.config/nvm/versions/node/${process.version}/bin`);
 const allowedPaths = root && (quickstart
   ? [[path.join(root, 'tools'), path.join(root, 'home/.local/bin')].join(path.delimiter), path.join(root, 'tools')]
   : [[path.join(root, 'tools'), path.join(root, 'home/.local/bin')].join(path.delimiter)]);
+if (Array.isArray(allowedPaths) && quickstart && nvmBin && fs.existsSync(path.join(nvmBin, 'node'))) {
+  const installedNode = path.join(nvmBin, 'node');
+  const originalNode = fs.realpathSync(path.join(root, 'tools/node'));
+  if (fs.lstatSync(installedNode).isSymbolicLink() || !fs.lstatSync(installedNode).isFile()
+    || !fs.readFileSync(installedNode).equals(fs.readFileSync(originalNode))) fail();
+  allowedPaths.push(...allowedPaths.map(value => `${nvmBin}:${value}`));
+}
 if (process.env.BALLIN_NO_ANALYTICS !== '1' || !root || fs.realpathSync(root) !== root || process.env.HOME !== path.join(root, 'home')
   || !allowedPaths?.includes(process.env.PATH ?? '')) fail();
 
@@ -33,12 +41,46 @@ globalThis.fetch = deny;
 
 const childProcess = require('child_process');
 const installedBallin = path.join(root, 'home/.ballin-scripts/bin/ballin');
+// Native NVM trust checks inspect ACL metadata, including the source's parents.
+// Permit only canonical ancestors of the unchanged controlled source, not an
+// arbitrary ls target or a linked tree outside the fixture.
+const nvmAclTarget = (target: unknown): boolean => {
+  const source = path.join(root, 'home/.config/nvm/nvm.sh');
+  try {
+    return typeof target === 'string' && path.resolve(target) === target
+      && (target === source || source.startsWith(target === '/' ? '/' : `${target}/`))
+      && fs.realpathSync(source) === source && fs.lstatSync(source).isFile()
+      && fs.readFileSync(source).equals(fs.readFileSync(path.join(root, 'nvm-fixture.sh')));
+  } catch { return false; }
+};
+const exactDataFields = (value: unknown, fields: string[]): boolean => (
+  value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype
+  && Reflect.ownKeys(value).length === fields.length
+  && fields.every(field => Object.hasOwn(Object.getOwnPropertyDescriptor(value, field) ?? {}, 'value'))
+);
 for (const name of ['exec', 'execSync']) childProcess[name] = deny;
 for (const name of ['spawn', 'spawnSync', 'execFile', 'execFileSync', 'fork']) {
   const original = childProcess[name];
   childProcess[name] = (command: string, ...args: unknown[]) => {
     if (name === 'fork') fail();
     const candidate = command.includes(path.sep) ? path.resolve(command) : path.join(root, 'tools', command);
+    const probeArgs = args[0] as string[];
+    const probeOptions = args[1] as { env?: NodeJS.ProcessEnv; encoding?: string; shell?: unknown } | undefined;
+    const probeEnv = probeOptions?.env;
+    if (quickstart && name === 'spawnSync' && command === '/bin/ls' && args.length === 2
+      && Array.isArray(probeArgs) && probeArgs.length === 2 && probeArgs[0] === '-lde'
+      && exactDataFields(probeOptions, ['encoding', 'env', 'shell'])
+      && probeOptions?.encoding === 'utf8' && probeOptions.shell === false
+      && exactDataFields(probeEnv, ['LC_ALL', 'PATH'])
+      && probeEnv?.PATH === '/usr/bin:/bin' && probeEnv.LC_ALL === 'C'
+      && nvmAclTarget(probeArgs[1])) return original(command, ...args);
+    if (quickstart && command === '/bin/bash' && probeArgs?.[0] === '--noprofile' && probeArgs[1] === '--norc'
+      && probeArgs[4] === 'ballin-nvm-probe' && probeArgs.length === 6
+      && probeArgs[3] === '. "$1" --no-use >/dev/null && declare -F nvm >/dev/null || exit 1; printf "loadable\\n"; nvm version default'
+      && probeArgs[5] === path.join(root, 'home/.config/nvm/nvm.sh')
+      && fs.readFileSync(probeArgs[5], 'utf8') === fs.readFileSync(path.join(root, 'nvm-fixture.sh'), 'utf8')
+      && probeEnv?.HOME?.startsWith(path.join(root, 'tmp/ballin-nvm-probe-')) && probeEnv.NVM_DIR === path.join(probeEnv.HOME, 'nvm')
+      && probeEnv.PATH === process.env.PATH && probeEnv.BASH_ENV === '' && probeEnv.ENV === '') return original(command, ...args);
     if (candidate !== process.execPath && !candidate.startsWith(path.join(root, 'tools') + path.sep)
       && candidate !== path.join(root, 'home/.local/bin/ballin') && candidate !== installedBallin) fail();
     if (candidate === installedBallin) {

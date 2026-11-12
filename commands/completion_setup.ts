@@ -1,4 +1,4 @@
-const { terminalPath } = require('./terminalStyle.ts');
+const { terminalPath, terminalProse } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const tty = require('tty');
@@ -125,9 +125,9 @@ const appendActivation = (target: CompletionTarget): boolean => {
 };
 
 const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions = {}): void => {
-  const write = options.write ?? writeStdoutLine;
+  const write = options.write ?? ((text = '') => writeStdoutLine(terminalProse(text)));
   const fallback = (needsContext = false): void => {
-    if (needsContext) write();
+    if (needsContext) write('');
     write(`Tab completion skipped.\n🔗 Enable it later:\n${docsUrl}#startup-files-and-manual-activation`);
   };
   if (!(options.interactive ?? tty.isatty(0))) { fallback(true); return; }
@@ -141,7 +141,7 @@ const offerCompletionSetup = (docsUrl: string, options: CompletionSetupOptions =
       return prompt(question);
     };
     const target = completionTarget(env, completionPrompt);
-    if (!target) { fallback(true); return; }
+    if (!target) { fallback(firstQuestion); return; }
     // Inspect only the selected file; a conventional location is not activation proof.
     try {
       const fd = fs.openSync(target.profile, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);

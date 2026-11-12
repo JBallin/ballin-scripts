@@ -1227,6 +1227,40 @@ kill -TERM "$$"
     assert.equal(fs.readFileSync(logPath, 'utf8'), 'install --lts\n');
   });
 
+  for (const unsafe of [false, true]) it(`${unsafe ? 'rejects' : 'uses'} a Homebrew NVM working tree before invoking NVM`, () => {
+    const prefix = path.join(tempDir, 'brew'); const libexec = path.join(prefix, 'opt/nvm/libexec');
+    fs.mkdirSync(libexec, { recursive: true });
+    const marker = path.join(tempDir, 'nvm-ran');
+    fs.writeFileSync(path.join(libexec, 'nvm.sh'), `nvm() { printf ran > '${marker}'; }\n`);
+    writeTestExecutable('brew', `#!/bin/sh\nif [ "$1" = --prefix ]; then printf '%s\\n' '${prefix}'; fi\n`);
+    const nvmDir = path.join(tempDir, 'custom-nvm'); fs.mkdirSync(nvmDir);
+    fs.mkdirSync(path.join(nvmDir, '.cache')); fs.writeFileSync(path.join(nvmDir, '.cache/archive'), 'fixture');
+    if (unsafe) fs.chmodSync(path.join(nvmDir, '.cache/archive'), 0o666);
+    const result = runUpdate({ NVM_DIR: nvmDir });
+    assert.equal(result.status, unsafe ? 1 : 0, result.stdout + result.stderr);
+    assert.equal(fs.existsSync(marker), !unsafe);
+    if (unsafe) {
+      assert.include(result.stderr, 'NVM working tree failed safety checks');
+      assert.match(result.stderr, /\nUnsafe owner or permissions: \S*custom-nvm\/\.cache\/archive\n/u);
+      assert.include(result.stderr, 'ownership, permissions, ACLs');
+      assert.include(result.stderr, 'installation.md#quickstart-helper');
+      assert.notInclude(result.stderr, 'unable to load nvm');
+      assert.notInclude(result.stderr, 'Set `NVM_DIR`');
+    }
+  });
+
+  it('escapes an unsafe NVM path before naming it', () => {
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    installNvmStub(nvmDir);
+    const unsafe = path.join(nvmDir, 'evil\u001b[31m\nforged line');
+    fs.writeFileSync(unsafe, 'fixture'); fs.chmodSync(unsafe, 0o666);
+    const result = runUpdate({ NVM_DIR: nvmDir });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'evil\\u001b[31m\\nforged line"');
+    assert.notInclude(result.stderr, '\u001b');
+    assert.notInclude(result.stderr, '\nforged line');
+  });
+
   it('reports unexpected bash spawn failures and continues to backup', () => {
     const nvmDir = path.join(tempDir, 'custom-nvm');
     installNvmStub(nvmDir);

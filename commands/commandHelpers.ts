@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 const tty = require('tty');
 const { clearTemporaryStatus } = require('./temporaryStatus.ts');
-const { terminalHeading } = require('./terminalStyle.ts');
+const { terminalHeading, terminalPrompt } = require('./terminalStyle.ts');
 
 import type { SpawnSyncOptionsWithStringEncoding } from 'child_process';
 
@@ -112,7 +112,7 @@ const writeStderrLine = (text = ''): void => {
 };
 
 const readPromptLine = (prompt: string): PromptLine => {
-  process.stdout.write(prompt);
+  process.stdout.write(terminalPrompt(prompt));
   const bytes: number[] = [];
   const byte = Buffer.alloc(1);
   let complete = false;

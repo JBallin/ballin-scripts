@@ -6,7 +6,7 @@ import type { Sandbox } from './helpers/onboarding.ts';
 import type { ChildProcess } from 'child_process';
 
 const { scenarios, activeScenario, selectScenario } = require('./helpers/sandbox_scenarios.ts');
-const usage = 'Usage: npm run sandbox -- [--keep] [--scenario <name>] [--shell zsh|bash] | --cleanup <sandbox-root>';
+const usage = 'Usage: npm run sandbox -- [--quickstart] [--keep] [--scenario <name>] [--shell zsh|bash] | --cleanup <sandbox-root>';
 const write = (text: string): void => { process.stdout.write(text + '\n'); };
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\"'\"'")}'`;
 const readLine = (): Promise<string | null> => new Promise((resolve, reject) => {
@@ -48,12 +48,12 @@ const runQa = async (args = process.argv.slice(2)): Promise<number> => {
   if (shellIndex >= 0 && ((selectedShell !== 'zsh' && selectedShell !== 'bash') || args.lastIndexOf('--shell') !== shellIndex)) {
     write(usage); return 2;
   }
-  const options = args.filter((arg, index) => arg !== '--keep' && (shellIndex < 0 || (index !== shellIndex && index !== shellIndex + 1)));
-  if (args.filter((arg) => arg === '--keep').length > 1 || (options.length && !(options.length === 2 && options[0] === '--scenario' && Object.hasOwn(scenarios, options[1])))) {
+  const options = args.filter((arg, index) => arg !== '--keep' && arg !== '--quickstart' && (shellIndex < 0 || (index !== shellIndex && index !== shellIndex + 1)));
+  if (args.filter((arg) => arg === '--keep').length > 1 || args.filter((arg) => arg === '--quickstart').length > 1 || (options.length && !(options.length === 2 && options[0] === '--scenario' && Object.hasOwn(scenarios, options[1])))) {
     write(usage);
     return 2;
   }
-  const sandbox: Sandbox = createSandbox();
+  const sandbox: Sandbox = createSandbox({ quickstart: args.includes('--quickstart') });
   const activePath = path.join(sandbox.root, '.active');
   const cleanupCommand = `npm run sandbox -- --cleanup ${shellQuote(sandbox.root)}`;
   const groups = new Set<number>();
@@ -90,11 +90,12 @@ const runQa = async (args = process.argv.slice(2)): Promise<number> => {
   const launch = (commandArgs: string[]): Promise<number> => {
     const env = sandboxEnvironment(sandbox);
     if (selectedShell) env.SHELL = `/bin/${selectedShell}`;
-    const installer = commandArgs[0] === 'install';
+    const quickstart = commandArgs[0] === 'quickstart';
+    const installer = commandArgs[0] === 'install' || quickstart;
     return new Promise((resolve, reject) => {
       launchPending = true;
       recordSession(sandbox, [...groups], true);
-      const launched: ChildProcess = spawn(installer ? path.join(sandbox.source, 'install.sh') : path.join(sandbox.bin, 'ballin'),
+      const launched: ChildProcess = spawn(installer ? path.join(sandbox.source, quickstart ? 'quickstart.sh' : 'install.sh') : path.join(sandbox.bin, 'ballin'),
         installer ? [] : commandArgs,
         { cwd: sandbox.home, env, stdio: 'inherit', detached: true });
       child = launched;
@@ -131,7 +132,7 @@ const runQa = async (args = process.argv.slice(2)): Promise<number> => {
   try {
     if (options.length) selectScenario(sandbox, options[1]);
     write(`Active scenario: ${activeScenario(sandbox)}`);
-    if (await launch(['install'])) preserve = true;
+    if (await launch([sandbox.quickstart ? 'quickstart' : 'install'])) preserve = true;
     while (!interrupted) {
       write(`\nActive scenario: ${activeScenario(sandbox)}\nCommands: scenarios | scenario <name> | clear | install | ballin <arguments> | inspect | reset fresh | reset create | reset reconnect | keep | exit`);
       process.stdout.write('sandbox> ');
