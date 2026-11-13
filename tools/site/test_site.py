@@ -522,6 +522,29 @@ class BuildTests(unittest.TestCase):
             self.assertIn('View source on GitHub', footer)
             self.assertIn('Back up dotfiles. Keep your tools current.', footer)
 
+    def test_main_navigation_marks_only_the_current_section(self):
+        for base in ('', '/ballin-scripts'):
+            for gallery in (False, True):
+                output = self.folder / f'navigation-{bool(base)}-{gallery}'
+                with contextlib.redirect_stdout(io.StringIO()):
+                    site.build(output, self.pin if gallery else self.bootstrap_pin, base,
+                               self.bundle if gallery else None)
+                for path in output.rglob('*.html'):
+                    relative = path.relative_to(output).as_posix()
+                    with self.subTest(base=base, gallery=gallery, page=relative):
+                        page = path.read_text()
+                        nav = page.split('<nav aria-label="Main">', 1)[1].split('</nav>', 1)[0]
+                        docs_current = (' aria-current="page"' if relative == 'docs/index.html'
+                                        else ' aria-current="location"' if relative.startswith('docs/') else '')
+                        gallery_current = (' aria-current="page"' if relative in ('gallery/index.html', 'gallery.html')
+                                           else ' aria-current="location"' if relative.startswith('gallery/') else '')
+                        expected = f'<a href="{base}/docs/"{docs_current}>Documentation</a>'
+                        if gallery:
+                            expected += f'<a href="{base}/gallery/"{gallery_current}>Gallery</a>'
+                        expected += f'<a href="https://github.com/{site.REPO}">GitHub ↗</a>'
+                        self.assertEqual(nav, expected)
+                        self.assertIn(f'<a class="wordmark" href="{base}/">', page)
+
     def test_complete_site_contains_docs_and_same_bundle_bytes(self):
         self.assertTrue((self.output / 'docs/installation.html').is_file())
         self.assertTrue((self.output / 'sitemap.xml').is_file())
@@ -661,8 +684,8 @@ class BuildTests(unittest.TestCase):
                     self.assertEqual(preview.selected_file(output, base, base + '/' + route), (output / relative).resolve())
                     header = page.split('</header>', 1)[0]
                     self.assertIn(f'class="wordmark" href="{base}/"', header)
-                    self.assertIn(f'href="{base}/docs/">Documentation</a>', header)
-                    self.assertIn(f'href="{base}/gallery/">Gallery</a>', header)
+                    self.assertIn(f'href="{base}/docs/"', header)
+                    self.assertIn(f'href="{base}/gallery/"', header)
                     self.assertIn(f'<loc>{origin}{base}/{route}</loc>', sitemap)
                 self.assertEqual((output / 'gallery.html').read_bytes(), (output / 'gallery/index.html').read_bytes())
                 self.assertNotIn('/gallery.html</loc>', sitemap)
