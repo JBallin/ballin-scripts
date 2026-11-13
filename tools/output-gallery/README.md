@@ -546,7 +546,7 @@ Use a clear gallery-assets name, including a fresh suffix for replacement output
 Do not use `--clobber`. If the result is uncertain, inspect the actual release and
 assets before retrying; do not infer success from a partial log or create a
 workaround release. Continue with real-ID retrieval, reviewed pin/README activation
-and authorized Pages deployment in
+and authorized Netlify deployment in
 [the ordered runbook](../../docs/website.md#start-to-finish-workflow).
 Record the completed steps, exact identities/hashes and next blocked action for
 resumption. Do not put raw capture paths or credentials in public handoff records.
@@ -567,5 +567,6 @@ those pins as a tooling change. Historical replay keeps its separate original
 a trusted checkout of the tooling itself.
 
 Run focused checks with `python3 tools/output-gallery/test_gallery.py` for tooling
-changes. Documentation-only edits follow the repository's docs-only validation
-rule; do not run product flows as a documentation check.
+changes. The native macOS CI job also runs these synthetic renderer and fidelity
+tests; it does not generate or publish real captures. Documentation-only edits
+follow the repository's docs-only validation rule; do not run product flows as a documentation check.

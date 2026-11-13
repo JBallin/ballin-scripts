@@ -116,4 +116,4 @@
   directory or its private manifests/raw captures into the site. Preserve fail-closed
   pins and the complete current-docs/approved-assets snapshot contract.
 - Public links wait for verified destinations. Site changes do not authorize
-  release publication, capture uploads, Pages settings changes or deployment.
+  release publication, capture uploads, hosting settings changes or deployment.
