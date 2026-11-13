@@ -1,0 +1,131 @@
+name: Documentation site (Netlify)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - CONTRIBUTING.md
+      - .github/SUPPORT.md
+      - .github/SECURITY.md
+      - LICENSE.md
+      - 'docs/**'
+      - 'site/**'
+      - 'tools/site/**'
+      - .nvmrc
+      - .github/workflows/netlify.yml
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Publish production or an optional draft preview
+        type: choice
+        options: [preview, production]
+        default: preview
+        required: true
+      preview_ref:
+        description: Same-repository commit or branch for a preview (ignored for production)
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+# Serialize the whole build/deploy transaction. Even an older queued event builds
+# current main, never the historical event SHA. Previews are a separate lane.
+# An active deploy is not canceled; neither lane runs until explicitly enabled.
+concurrency:
+  group: ballin-netlify-${{ inputs.target || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'JBallin/ballin-scripts' && github.ref == 'refs/heads/main' && vars.NETLIFY_DEPLOYS_ENABLED == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    outputs:
+      source: ${{ steps.source.outputs.sha }}
+    steps:
+      - name: Check out complete snapshot source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ inputs.target == 'preview' && inputs.preview_ref || 'main' }}
+          persist-credentials: false
+      - name: Record complete snapshot source
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+          # Do not restore or save preview code's package cache in main's scope.
+          package-manager-cache: false
+      - name: Install site renderer
+        run: npm ci --prefix site --ignore-scripts
+      - name: Build current docs and the explicitly pinned bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ inputs.target || 'production' }}
+        run: |
+          args=()
+          if [[ "$TARGET" == production ]]; then args+=(--analytics); fi
+          python3 tools/site/site.py build "${args[@]}"
+      - name: Upload complete snapshot
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-snapshot
+          path: .site-output/site
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    environment:
+      name: ${{ inputs.target == 'preview' && 'netlify-preview' || 'netlify-production' }}
+    steps:
+      - name: Download complete snapshot
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: site-snapshot
+          path: ${{ runner.temp }}/site-snapshot
+      - name: Check current publication inputs
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Refuse a superseded snapshot
+        if: inputs.target != 'preview'
+        env:
+          SITE_SOURCE: ${{ needs.build.outputs.source }}
+        run: |
+          git diff --exit-code "$SITE_SOURCE" HEAD -- \
+            README.md CONTRIBUTING.md .github/SUPPORT.md .github/SECURITY.md LICENSE.md \
+            docs site tools/site .nvmrc .github/workflows/netlify.yml
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+      # Resolve only the reviewed tree, before exposing deployment credentials.
+      - name: Install locked deploy CLI
+        run: npm ci --prefix tools/site/netlify-cli --ignore-scripts
+      - name: Deploy complete snapshot
+        working-directory: ${{ runner.temp }}
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+          SITE_SOURCE: ${{ needs.build.outputs.source }}
+          TARGET: ${{ inputs.target || 'production' }}
+        run: |
+          test -n "$NETLIFY_AUTH_TOKEN"
+          test -n "$NETLIFY_SITE_ID"
+          args=()
+          if [[ "$TARGET" == production ]]; then args+=(--prod); fi
+          "$GITHUB_WORKSPACE/tools/site/netlify-cli/node_modules/.bin/netlify" deploy \
+            --no-build --dir "$RUNNER_TEMP/site-snapshot" \
+            --site "$NETLIFY_SITE_ID" --message "$SITE_SOURCE" \
+            --json "${args[@]}" > "$RUNNER_TEMP/netlify-deploy.json"
+          cat "$RUNNER_TEMP/netlify-deploy.json"

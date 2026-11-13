@@ -14,3 +14,9 @@ ballin.config.json
 /tools/pr-662-output-gallery/verification.json
 
 /tools/output-gallery/__pycache__/
+
+# Complete site snapshots, curated publication bundles and local selection files.
+/.site-output/
+/site/node_modules/
+/tools/site/__pycache__/
+/tools/site/netlify-cli/node_modules/

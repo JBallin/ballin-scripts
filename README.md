@@ -35,6 +35,10 @@ Open Terminal and run the [install script](https://github.com/JBallin/ballin-scr
 BALLIN_UPDATE_TRACK=main /bin/bash -c "$(curl -q -fsSL https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh)"
 ```
 
+Before the first stable release, this command explicitly selects `main`.
+See [revision selection](docs/installation.md#selecting-a-revision) for the
+stable-release and development tracks.
+
 Backups are optional; you can configure them later with `ballin backup setup`.
 
 See [Installation and removal](docs/installation.md) for setup details and
@@ -43,7 +47,8 @@ troubleshooting.
 ## Example output
 
 Run `ballin update` for routine maintenance and optional automatic backups. This
-example shows a fully configured run.
+condensed, illustrative example shows a fully configured run. Actual output
+depends on your enabled tools and preferences.
 
 ```text
 $ ballin update
@@ -73,7 +78,7 @@ Last successful backup: Dec 31, 2025, 4:00:00 PM GMT-08:00
 ✔ bash_completions
 ✔ Brewfile
 ...
-✎ zshrc
+~ zshrc
 View changes: https://github.com/example-user/ballin-backups/commit/0123456789abcdef0123456789abcdef01234567
 ```
 
