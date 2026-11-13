@@ -574,6 +574,14 @@ def related_gallery(source, base, enabled):
     return f'<p class="gallery-related"><a href="{base}/gallery/{anchor}">{label}</a></p>'
 
 
+def section_current(path, section):
+    if path == f'{section}/index.html':
+        return ' aria-current="page"'
+    if path.startswith(f'{section}/'):
+        return ' aria-current="location"'
+    return ''
+
+
 def page_url(path, base, origin):
     if PurePosixPath(path).name == 'index.html':
         path = path.removesuffix('index.html')
@@ -637,7 +645,8 @@ def build(output, pin_path, base, local_bundle=None, origin='https://jballin.git
         for page in pages:
             values = {**page_metadata(page, base, origin), 'base': base,
                       'analytics': (f'<script src="{base}/analytics.js" data-token="{analytics_token}" data-origin="{origin}" defer></script>' if analytics_token else ''),
-                      'galleryNav': f'<a href="{base}/gallery/">Gallery</a>' if manifest else '',
+                      'docsCurrent': section_current(page['path'], 'docs'),
+                      'galleryNav': f'<a href="{base}/gallery/"{section_current(page["path"], "gallery")}>Gallery</a>' if manifest else '',
                       'content': add_gallery_section_links(page, manifest, base) + related_gallery(page['source'], base, manifest is not None), 'source': source_base + '/' + urllib.parse.quote(page['source'])}
             rendered = re.sub(r'\{\{(\w+)\}\}', lambda m: values[m[1]], template)
             target = work / page['path']

@@ -331,6 +331,8 @@ an HTTP response or source inspection alone does not establish visual quality.
   wide and narrow widths (for example 1280, 1600 and 390 pixels). Keep the shared
   navigation order Documentation, Gallery, GitHub; bootstrap intentionally omits
   Gallery. Check aligned page widths, readable text and no page-wide overflow.
+  Confirm the current Documentation or Gallery section has a thin underline,
+  including on nested guides and example pages; keep the wordmark and GitHub plain.
 - Complete a docs → gallery → example → matching text → download → return journey.
   Follow the intro's Gallery link when present, the README example and
   Acknowledgments links. Repeat navigation and browser Back/Forward. Capture
