@@ -25,7 +25,7 @@ For the project overview, see the [main README](../README.md).
 | Guide | Purpose |
 | --- | --- |
 | [Releasing Ballin](releasing.md) | Prepare and approve a versioned release. |
-| [Documentation site and public gallery](website.md) | Build complete docs snapshots, curate approved assets and operate the Pages handoff. |
+| [Documentation site and public gallery](website.md) | Build complete docs snapshots, curate approved assets and operate Netlify publishing. |
 | [Testing and coverage](testing.md) | Test isolation, coverage comparisons, and runtime and platform limits. |
 | [Installation testing](installation-testing.md) | Test Ballin installation in a macOS VM. |
 | [Code scanning](code-scanning.md) | Advanced CodeQL coverage, fork trust boundary, verification, and recovery. |

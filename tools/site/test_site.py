@@ -1112,6 +1112,14 @@ class DeployDependencyTests(unittest.TestCase):
         cls.install = next(step for step in cls.steps if step['name'] == 'Install locked deploy CLI')
         cls.publish = next(step for step in cls.steps if step['name'] == 'Deploy complete snapshot')
 
+    def test_preview_build_does_not_share_package_caches(self):
+        build = self.workflow['jobs']['build']
+        setup = next(step for step in build['steps'] if step['name'] == 'Set up Node.js')
+        self.assertEqual(setup['with']['package-manager-cache'], False)
+        self.assertNotIn('cache', setup['with'])
+        self.assertNotIn('cache-dependency-path', setup['with'])
+        self.assertFalse(any(step.get('uses', '').startswith('actions/cache') for step in build['steps']))
+
     def test_only_installed_reviewed_tree_receives_credentials(self):
         self.assertNotIn('env', self.workflow)
         self.assertNotIn('env', self.workflow['jobs']['deploy'])

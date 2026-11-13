@@ -526,8 +526,10 @@ job installs it from current `main` with `npm ci --ignore-scripts` before exposi
 Netlify credentials, then invokes the installed binary outside the checkout.
 Review the complete lockfile when updating the CLI. A docs change reuses the
 pinned bundle; a bundle-pin change includes current docs. Gallery generation and
-asset approval stay local. GitHub Pages deployment and its write/OIDC permissions
-are removed. No Netlify Git integration or automatic PR previews are needed.
+asset approval stay local. This workflow does not use GitHub Pages deployment or
+write/OIDC permissions. The build job disables automatic package-manager caching;
+preview refs still require review before their code runs.
+No Netlify Git integration or automatic PR previews are needed.
 
 Publication is off until the repository variable `NETLIFY_DEPLOYS_ENABLED` is
 explicitly set to `true`. Before enabling it, separately authorize and configure

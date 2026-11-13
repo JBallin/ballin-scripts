@@ -86,7 +86,7 @@ For gallery publication, continue with the
 The [tooling recipes](../tools/output-gallery/README.md#package-approved-examples)
 own generation, selection, ZIP naming, replacement and offline candidate review;
 [site maintenance](website.md#attach-to-the-actual-product-release) owns release
-attachment, real pin verification and Pages activation. Whenever the canonical
+attachment, real pin verification and Netlify publication. Whenever the canonical
 Update example changes, exporting and updating the README's matching embedded
 text from that same bundle is a required dependency, not later cleanup. Coordinate
 it with pin activation; first image links wait for verified public delivery.
@@ -94,7 +94,7 @@ For a partial gallery refresh, put the
 [replaced/retained summary and local-review results](../tools/output-gallery/README.md#review-the-refresh-summary)
 in the review handoff so reviewers can go directly to the replaced examples.
 
-Before a merge, account for automatic Pages and Worker deployment triggers, not
+Before a merge, account for automatic Netlify and Worker deployment triggers, not
 only manual release/deploy commands. Record completed steps, tested SHA, approved
 version/notes, release/asset identity and hashes, verification and next blocked
 action. On resume, recheck external state before retrying. Preserve a known-good
