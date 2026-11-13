@@ -199,15 +199,21 @@ class GalleryTests(unittest.TestCase):
 
 
 class GalleryBuildTests(unittest.TestCase):
+    def run_checked(self, command):
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0,
+                         f'{command!r}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}')
+        return result
+
     def test_current_setup_copy_and_preserved_historical_replay(self):
         legacy = TOOLS.parent / 'pr-662-output-gallery'
         source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=TOOLS, text=True).strip()
         with tempfile.TemporaryDirectory(prefix='ballin-gallery-source-test-') as temp:
             current = Path(temp) / 'current'
-            subprocess.run(['python3', str(legacy / 'build.py'), '--candidate', source,
-                            '--output', str(current)], check=True, capture_output=True, timeout=30)
+            self.run_checked(['python3', str(legacy / 'build.py'), '--candidate', source,
+                              '--output', str(current)])
             shutil.copy2(legacy / 'verify.py', current)
-            subprocess.run(['python3', str(current / 'verify.py')], check=True, capture_output=True, timeout=30)
+            self.run_checked(['python3', str(current / 'verify.py')])
             text = (current / 'plain.txt').read_text()
             self.assertIn('Enable Ballin tab completion in ~/.bash_profile? [y/N] Yes', text)
             self.assertIn('Enable Ballin tab completion in ~/.bash_profile? [y/N] No', text)
@@ -220,7 +226,7 @@ class GalleryBuildTests(unittest.TestCase):
             self.assertIn("phase 'Initial configuration'", [a['anchor'] for a in anchors])
             historical = Path(temp) / 'historical'
             shutil.copytree(legacy, historical)
-            subprocess.run(['python3', str(historical / 'verify.py')], check=True, capture_output=True, timeout=30)
+            self.run_checked(['python3', str(historical / 'verify.py')])
             self.assertIn('Change preferences later with', (historical / 'plain.txt').read_text())
 
 
