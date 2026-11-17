@@ -26,6 +26,7 @@ type SpawnArgs = string[];
 
 const fetchConfigJSON = () => fetchConfig().configJSON;
 const cliPath = path.join(__dirname, '..', 'bin', 'ballin');
+const resetHint = 'Run `ballin setup` to review your preferences. To reconnect an existing backup, run `ballin backup setup` and choose Reconnect.';
 
 const currentConfigJSON = fetchConfigJSON();
 const invalidPathCases = [
@@ -384,10 +385,30 @@ describe('config', () => {
     const result = runConfigCli(['reset']);
 
     assert.equal(result.status, 0);
-    assert.equal(result.stdout, `Config reset to defaults.\n\nPrevious config:\n${changedConfig}\n\nCurrent config:\n${fs.readFileSync(path.join(__dirname, '../config/.defaultConfig.json'), 'utf8')}\n`);
+    assert.equal(result.stdout, `Config reset to defaults.\n\nPrevious config:\n${changedConfig}\n\nCurrent config:\n${fs.readFileSync(path.join(__dirname, '../config/.defaultConfig.json'), 'utf8')}\n${resetHint}\n`);
+    assert.equal(result.stderr, '');
     assert.isNull(getConfig('backup.repository'));
     assert.deepEqual(fetchConfig().configObj, defaultConfig);
   });
+
+  for (const noColor of [false, true]) {
+    it(`styles only the reset hint commands on a terminal with NO_COLOR=${noColor}`, () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ballin-reset-hint-'));
+      const preload = path.join(root, 'tty.cjs');
+      fs.writeFileSync(preload, 'Object.defineProperty(process.stdout, "isTTY", { value: true });\n');
+      try {
+        const result = runConfigCli(['reset'], { NODE_OPTIONS: `--require ${preload}`, TERM: 'xterm', NO_COLOR: noColor ? '1' : undefined });
+        const expected = noColor ? resetHint : resetHint.replace('`ballin setup`', '\x1b[1mballin setup\x1b[0m').replace('`ballin backup setup`', '\x1b[1mballin backup setup\x1b[0m');
+        assert.equal(result.status, 0);
+        assert.equal(result.stderr, '');
+        assert.isTrue(result.stdout.endsWith(`\n\n${expected}\n`));
+        assert.include(result.stdout, `Current config:\n${fs.readFileSync(path.join(__dirname, '../config/.defaultConfig.json'), 'utf8')}\n`);
+        assert.deepEqual(fetchConfig().configObj, defaultConfig);
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
 
   it('CLI reset recreates the default config when the config file is missing', () => {
     fs.rmSync(configPath);
@@ -398,6 +419,7 @@ describe('config', () => {
     assert.include(result.stdout, 'Config reset to defaults.\n\nPrevious config:');
     assert.include(result.stdout, 'Unable to read previous config.');
     assert.notInclude(result.stdout, configPath);
+    assert.isTrue(result.stdout.endsWith(`${resetHint}\n`));
     assert.deepEqual(fetchConfig().configObj, defaultConfig);
     assert.equal(result.stderr, '');
   });
@@ -409,6 +431,7 @@ describe('config', () => {
 
     assert.equal(result.status, 0);
     assert.include(result.stdout, 'Config reset to defaults.\n\nPrevious config:\n{not json\n\nCurrent config:\n');
+    assert.isTrue(result.stdout.endsWith(`${resetHint}\n`));
     assert.deepEqual(fetchConfig().configObj, defaultConfig);
     assert.equal(result.stderr, '');
   });
