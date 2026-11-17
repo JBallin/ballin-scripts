@@ -1,6 +1,6 @@
 const { formatHelp } = require('../commands/help_format.ts');
 const { configAction } = require('./index.ts');
-const { terminalCommandReferences } = require('../commands/terminalStyle.ts');
+const { terminalCommand, terminalCommandReferences } = require('../commands/terminalStyle.ts');
 const { ConfigError } = require('./store.ts');
 const { Console } = require('node:console');
 const { commandHelpOptionName } = require('../commands/top_level_commands.ts');
@@ -44,6 +44,9 @@ const runConfigCli = (args: string[] = process.argv.slice(2)): void => {
 
   try {
     configConsole.log(configAction(args));
+    if (args[0] === 'reset') {
+      configConsole.log(`Run ${terminalCommand('ballin setup')} to review your preferences. To reconnect an existing backup, run ${terminalCommand('ballin backup setup')} and choose Reconnect.`);
+    }
     process.exitCode = 0;
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
