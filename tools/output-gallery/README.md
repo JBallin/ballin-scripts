@@ -13,8 +13,15 @@ open .output-gallery/4ea163e9197833f83e4a87a9f0b4cfa56e69d8c9/staged-02/output-0
 
 Use a full source SHA available in local Git objects. The example selects the
 repaired `version-aware-install` stack; refresh it as reviewed product source
-changes. These are current-stack review examples, not stable-release documentation
-examples. The separately approved v1.0.0 capture/publication sequence is unchanged.
+changes. Identify whether each example is staged, an actual explicit-SHA candidate
+run or a published stable-release capture; these are different claims. Genuine
+stable-install examples must use the published stable commands from an approved,
+published stable release. An explicit-SHA candidate run does not establish stable
+selection.
+
+Refresh relevant examples when the shown command or output materially changes.
+Reuse unaffected examples with their original source revisions and provenance;
+a documentation-only change or a new release alone does not require recapture.
 
 `--output /tmp/ballin-gallery-review` selects another new directory. Existing
 output is refused to preserve evidence. Generated assets stay out of Git; the
