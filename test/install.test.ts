@@ -5,9 +5,9 @@ const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
 const terminalGuidance = '✓ Setup complete.\nOpen a new Terminal and run `ballin help`.';
-const docsUrl = 'getballin.com/docs/installation.html';
+const docsUrl = 'getballin.com/docs/installation';
 const troubleshootingUrl = `${docsUrl}#health-and-recovery`;
-const analyticsDocsUrl = 'getballin.com/docs/analytics.html#what-will-analytics-share';
+const analyticsDocsUrl = 'getballin.com/docs/analytics#what-will-analytics-share';
 
 type RunInstallOptions = {
   env?: NodeJS.ProcessEnv;
@@ -490,7 +490,7 @@ ballin_download() { : > "$2"; }
     assert.notInclude(result.stdout, 'ERROR:');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'Install supported Node.js');
-    assert.include(result.stdout, 'i Node.js details: getballin.com/docs/optional-capabilities.html#nodejs\n');
+    assert.include(result.stdout, 'i Node.js details: getballin.com/docs/optional-capabilities#nodejs\n');
     assert.notInclude(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');
@@ -598,7 +598,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
     assert.notInclude(result.stdout, 'ERROR:');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'existing installation method');
-    assert.include(result.stdout, 'i Node.js details: getballin.com/docs/optional-capabilities.html#nodejs\n');
+    assert.include(result.stdout, 'i Node.js details: getballin.com/docs/optional-capabilities#nodejs\n');
     assert.notInclude(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');

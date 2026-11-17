@@ -753,7 +753,7 @@ existing_hidden_node() {
 }
 
 manual_node_guidance() {
-  fail "Existing Node.js at $(display_path "$1") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart."$'\ni Node.js details: '"getballin.com/docs/optional-capabilities.html#nodejs"
+  fail "Existing Node.js at $(display_path "$1") could not be verified. Check it using its existing installation method and make a supported Node.js available on PATH, then rerun Quickstart."$'\ni Node.js details: '"getballin.com/docs/optional-capabilities#nodejs"
 }
 
 brew_checked() {
@@ -1201,7 +1201,7 @@ plan_nvm() {
   discover_nvm
   if [[ "$compatible" == true && "$nvm_follows_lts" == true && "$node_tool" == "$nvm_directory"/versions/node/*/bin/node ]]; then return; fi
   if [[ -n "$nvm_problem" ]]; then printf '%s\n' "$nvm_problem"; fi
-  documentation_pointer 'Node.js details' 'getballin.com/docs/optional-capabilities.html#nodejs'
+  documentation_pointer 'Node.js details' 'getballin.com/docs/optional-capabilities#nodejs'
   local question='Ballin requires Node.js. Install it using NVM?'
   [[ "$compatible" != true ]] || question='Use NVM with Node.js LTS instead?'
   if ! confirm "$question"; then
@@ -1374,7 +1374,7 @@ manual_nvm_guidance() {
   if [[ "${nvm_profile_needed:-false}" == true && "${path_setup_complete:-false}" != true ]]; then
     printf 'Activate NVM in your shell startup file before running Ballin in a new Terminal.\nUse this NVM working directory:\n'
     printf 'export NVM_DIR=%q\n' "$nvm_directory"
-    documentation_pointer 'NVM activation' 'getballin.com/docs/installation.html#manual-nvm-activation'
+    documentation_pointer 'NVM activation' 'getballin.com/docs/installation#manual-nvm-activation'
   fi
 }
 
@@ -1444,7 +1444,7 @@ check_existing_path() {
   if [[ "$status" == 0 ]]; then
     path_setup_complete=true
   else
-    path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH."$'\ni Manual setup: '"getballin.com/docs/installation.html#manual-path-setup"
+    path_incomplete "$(display_path "$profile") already mentions a setup directory. Review its PATH entries before changing PATH."$'\ni Manual setup: '"getballin.com/docs/installation#manual-path-setup"
   fi
   return 0
 }
@@ -1753,7 +1753,7 @@ main() {
         printf '.\n'
       fi
     fi
-    documentation_pointer 'Installation details' 'getballin.com/docs/installation.html#what-installation-changes'
+    documentation_pointer 'Installation details' 'getballin.com/docs/installation#what-installation-changes'
     if ! confirm 'Proceed with installation?'; then
       "$input_ended" && fail 'No answer received. Quickstart stopped before installing prerequisites.'
       printf "\nPrerequisite installation skipped.\nRerun Quickstart when you’re ready.\n"
@@ -1833,7 +1833,7 @@ main() {
     printf '.\n'
   else
     printf "\nBallin is installed. PATH setup wasn’t verified.\n"
-    documentation_pointer 'Manual setup' 'getballin.com/docs/installation.html#manual-path-setup'
+    documentation_pointer 'Manual setup' 'getballin.com/docs/installation#manual-path-setup'
   fi
 }
 

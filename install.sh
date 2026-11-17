@@ -335,8 +335,8 @@ ballin_select "$@" || exit $?
 if [[ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 && "$ballin_mode" != self-update && ! -d "$HOME/.ballin-scripts" ]]; then phase 'Setting up Ballin'; fi
 
 repo_dir="$HOME/.ballin-scripts"
-docs_url='getballin.com/docs/installation.html'
-analytics_docs_url='getballin.com/docs/analytics.html#what-will-analytics-share'
+docs_url='getballin.com/docs/installation'
+analytics_docs_url='getballin.com/docs/analytics#what-will-analytics-share'
 required_node_version=$ballin_minimum
 repo_existed=true
 setup_mode='refresh'
@@ -401,7 +401,7 @@ fi
 if [ ! -x "$(command -v node)" ]; then
   printf '\n'; error_icon; printf ' Node.js %s or newer is required.\n' "$required_node_version"
   printf '\nInstall supported Node.js, then '; print_retry_guidance; printf '.\n'
-  documentation_pointer 'Node.js details' 'getballin.com/docs/optional-capabilities.html#nodejs'
+  documentation_pointer 'Node.js details' 'getballin.com/docs/optional-capabilities#nodejs'
   exit 1
 else
   node_check=$(node -p "
@@ -420,7 +420,7 @@ else
     fi
     printf '\n'
     printf '\nUpdate or activate Node.js using your existing installation method, then '; print_retry_guidance; printf '.\n'
-    documentation_pointer 'Node.js details' 'getballin.com/docs/optional-capabilities.html#nodejs'
+    documentation_pointer 'Node.js details' 'getballin.com/docs/optional-capabilities#nodejs'
     exit 1
   fi
 fi
@@ -563,7 +563,7 @@ if [[ "$ballin_mode" == self-update && "$ballin_applied" != true ]]; then
     status=$?
     [[ "$status" != 130 && "$status" != 143 ]] || exit "$status"
     ballin_error "Installed updater uses an unsupported contract."
-    documentation_pointer 'Recovery' 'getballin.com/docs/installation-testing.html#prelaunch-entrypoint-recovery' >&2
+    documentation_pointer 'Recovery' 'getballin.com/docs/installation-testing#prelaunch-entrypoint-recovery' >&2
     exit 1
   fi
   if node "$repo_dir/commands/repo_update.ts" self-update "$repo_dir" "$ballin_kind" "$ballin_value" "$ballin_sha" "$ballin_minimum" "$ballin_release_id" "$command_preflight"; then exit 0

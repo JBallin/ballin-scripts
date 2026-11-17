@@ -23,6 +23,10 @@ def selected_file(site, base, request_path):
         return None
     if target.is_dir():
         target = (target / 'index.html').resolve()
+    elif not target.is_file() and not target.suffix and not path.endswith('/'):
+        # Support clean HTML aliases without replacing existing files
+        # or directory indexes; legacy .html URLs remain directly accessible.
+        target = target.with_suffix('.html').resolve()
     if not target.is_relative_to(site):
         return None
     return target if target.is_file() else None

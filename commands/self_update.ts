@@ -13,7 +13,7 @@ const {
   updateInstalledRepo,
 } = require('./repo_update.ts');
 
-const sourcesUrl = 'getballin.com/docs/backup-sources.html';
+const sourcesUrl = 'getballin.com/docs/backup-sources';
 
 const localGit = (repoDir: string, args: string[]) => {
   const result = runCommand('git', args, {

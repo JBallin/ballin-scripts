@@ -10,6 +10,7 @@ import http.client
 import threading
 import json
 import os
+import re
 from pathlib import Path
 import stat
 import struct
@@ -806,12 +807,30 @@ class BuildTests(unittest.TestCase):
             (selected / 'index.html').write_text('public')
             (parent / 'private.txt').write_text('private')
             (selected / 'escape').symlink_to(parent / 'private.txt')
+            (selected / 'escape-html.html').symlink_to(parent / 'private.txt')
             (selected / 'nested').mkdir()
             (selected / 'nested/index.html').symlink_to(parent / 'private.txt')
             self.assertEqual(preview.selected_file(selected, '/ballin-scripts', '/ballin-scripts/index.html'), (selected / 'index.html').resolve())
-            for path in ['/private.txt', '/ballin-scripts/../private.txt', '/ballin-scripts/%2e%2e/private.txt', '/ballin-scripts/escape', '/ballin-scripts/nested/']:
+            for path in ['/private.txt', '/ballin-scripts/../private.txt', '/ballin-scripts/%2e%2e/private.txt', '/ballin-scripts/escape', '/ballin-scripts/escape-html', '/ballin-scripts/nested/']:
                 with self.subTest(path=path):
                     self.assertIsNone(preview.selected_file(selected, '/ballin-scripts', path))
+
+    def test_cli_clean_documentation_routes_and_anchors(self):
+        urls = set()
+        for source in [*sorted((site.ROOT / 'commands').glob('*.ts')), site.ROOT / 'install.sh', site.ROOT / 'quickstart.sh']:
+            text = source.read_text()
+            urls.update(re.findall(r'getballin\.com/docs/[a-z0-9-]+(?:\.html)?(?:#[a-z0-9-]+)?', text))
+            urls.update('getballin.com/docs/installation#' + anchor for anchor in
+                        re.findall(r'(?:\$\{docsUrl\}|\$docs_url)#([a-z0-9-]+)', text))
+        self.assertGreater(len(urls), 10)
+        for url in sorted(urls):
+            self.assertNotIn('.html', url)
+            route, _, fragment = url.removeprefix('getballin.com').partition('#')
+            clean = preview.selected_file(self.output, '/ballin-scripts', '/ballin-scripts' + route)
+            with self.subTest(url=url):
+                self.assertIsNotNone(clean)
+                if fragment:
+                    self.assertIn('id="' + fragment + '"', clean.read_text())
 
     def test_local_rebuild_switches_running_preview_only_after_success(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -905,10 +924,16 @@ class BuildTests(unittest.TestCase):
             selected = Path(directory)
             routes = {'/': 'home', '/index.html': 'home', '/?review=1': 'home',
                       '/docs/': 'docs', '/docs/index.html': 'docs',
+                      '/docs/installation': 'installation',
+                      '/docs/installation?review=1': 'installation',
+                      '/literal': 'extensionless file', '/literal.html': 'HTML file',
                       '/gallery/': 'gallery', '/gallery/index.html': 'gallery'}
             for directory, label in [(selected, 'home'), (selected / 'docs', 'docs'), (selected / 'gallery', 'gallery')]:
                 directory.mkdir(exist_ok=True)
                 (directory / 'index.html').write_text(label)
+            (selected / 'docs/installation.html').write_text('installation')
+            (selected / 'literal').write_text('extensionless file')
+            (selected / 'literal.html').write_text('HTML file')
             for base in ['', '/ballin-scripts']:
                 handler = functools.partial(preview.Preview, site=selected, base=base)
                 server = preview.http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)

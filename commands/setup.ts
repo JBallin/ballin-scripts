@@ -18,7 +18,7 @@ Use \`ballin backup setup\` for backup destinations and sensitive sources. Use \
 
 This review does not run updates, backups, or runtime installation.
 
-i Preferences: getballin.com/docs/optional-capabilities.html
+i Preferences: getballin.com/docs/optional-capabilities
 `;
 
 type SetupOutcome = 'completed' | 'cancelled' | 'failed';
@@ -49,7 +49,7 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
     // Destination validation belongs to backup setup, not preference review.
     const nvm = inspectNvm();
     reviewing = true;
-    writeStdoutLine(terminalProse('i Optional capabilities: getballin.com/docs/optional-capabilities.html'));
+    writeStdoutLine(terminalProse('i Optional capabilities: getballin.com/docs/optional-capabilities'));
     writeStdoutLine(`\n${terminalHeading('ballin update')}`);
     let savedChoice = false;
     const cancel = (): SetupOutcome => {

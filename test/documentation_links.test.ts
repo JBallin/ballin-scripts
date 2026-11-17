@@ -8,7 +8,7 @@ import type { Sandbox } from './helpers/onboarding.ts';
 
 const tty = { isTTY: true, columns: 18 };
 const capable = { TERM: 'xterm-256color', TERM_PROGRAM: 'iTerm.app', TERM_PROGRAM_VERSION: '3.5.0' };
-const guide = 'getballin.com/docs/installation.html#health-and-recovery';
+const guide = 'getballin.com/docs/installation#health-and-recovery';
 const native = (label: string, url = 'https://' + guide): string => `\x1b]8;;${url}\x1b\\\x1b[34m${label}\x1b[0m\x1b]8;;\x1b\\`;
 
 describe('documentation link rendering', () => {

@@ -1135,7 +1135,7 @@ require('https').request = () => {
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout.split("\n"), `✓ Created config: ${path.join(repoDir, 'ballin.config.json')}`);
     assert.isBelow(result.stdout.indexOf('Ballin installed successfully.'), result.stdout.indexOf('Set up private backups'));
-    assert.include(result.stdout, 'Backup details: getballin.com/docs/installation.html#optional-backup-setup-and-reconnect');
+    assert.include(result.stdout, 'Backup details: getballin.com/docs/installation#optional-backup-setup-and-reconnect');
     assert.include(result.stdout, `${displayDocsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
     assert.include(result.stdout, 'Backup setup skipped.');
