@@ -6,8 +6,8 @@ const { createAnalyticsCapture } = require('./helpers/analytics.ts');
 import type { CapturedAnalyticsEvent } from './helpers/analytics.ts';
 
 const ballinPath = path.join(__dirname, '..', 'bin', 'ballin');
-const docsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
-const analyticsDocsUrl = 'https://github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md';
+const docsUrl = 'getballin.com/docs/installation.html';
+const analyticsDocsUrl = 'getballin.com/docs/analytics.html';
 const updateLine = '==> Updating Ballin\n';
 type SpawnSelfUpdateOverrides = Omit<
   import('child_process').SpawnSyncOptionsWithStringEncoding,
@@ -177,6 +177,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       HOME: homeDir,
       PATH: toolDir,
       BALLIN_NO_ANALYTICS: '1',
+      TEST_NODE_RUNTIME: process.execPath,
       BALLIN_UPDATE_TEST_LOG: commandLogPath,
       BALLIN_UPDATE_TEST_LOCAL_GIT_LOG: path.join(testDir, 'local-git.log'),
       FAKE_GIT_MERGE_COUNT_PATH: mergeCountPath,
@@ -223,6 +224,21 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     fs.symlinkSync(process.execPath, path.join(toolDir, 'node'));
     installGitStub();
     installSetupStub();
+    // Isolate self-update reporting/scope/analytics from the selected installer.
+    // Real checkout safety and resolution are exercised by revision_* suites.
+    const selectedInstaller = path.join(testDir, 'selected-installer.cjs');
+    fs.writeFileSync(selectedInstaller, `
+const cp=require('child_process');
+for(const args of [['fetch','--quiet','origin','+main:refs/remotes/origin/main'],['checkout','main'],['merge','origin/main']]) {
+ const r=cp.spawnSync('git',args,{stdio:args[0]==='fetch'?['inherit','ignore','inherit']:'ignore'});
+ if(r.signal==='SIGINT'||r.status===130)process.exit(130);
+ if(r.signal==='SIGTERM'||r.status===143)process.exit(143);
+ if(r.status!==0){process.stdout.write('git '+args[0]+(args[0]==='fetch'?' origin main':'')+' failed\\n');process.exit(1);}
+}
+const r=cp.spawnSync(process.execPath,['commands/install_setup.ts','setup',process.env.PWD,${JSON.stringify(docsUrl)},${JSON.stringify(analyticsDocsUrl)},'self-update'],{stdio:'inherit'});
+if(r.signal==='SIGINT')process.exit(130);if(r.signal==='SIGTERM')process.exit(143);process.exit(r.status===null?1:r.status);
+`);
+    fs.writeFileSync(path.join(repoDir, 'install.sh'), `#!/bin/bash\nexec "$TEST_NODE_RUNTIME" "${selectedInstaller}"\n`);
     const scope = fs.readFileSync(path.join(__dirname, '../commands/backup_scope.json'), 'utf8');
     fs.writeFileSync(path.join(testDir, 'before-scope.json'), scope);
     fs.writeFileSync(path.join(testDir, 'after-scope.json'), scope);
@@ -251,6 +267,15 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     return { NODE_OPTIONS: `--require=${preload}`, TERM: 'xterm', NO_COLOR: '1' };
   };
 
+  it('does not report success or failure after a cancelled selected update', () => {
+    fs.writeFileSync(path.join(repoDir, 'install.sh'), '#!/bin/bash\nprintf "Revision change cancelled. The installed checkout is unchanged.\\n"\nexit 20\n');
+    const result = runSelfUpdate();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Revision change cancelled.');
+    assert.notInclude(result.stdout, 'already up to date'); assert.notInclude(result.stdout, 'Ballin updated');
+    assert.equal(result.stderr, '');
+  });
+
   it('reports a missing installed repository without child work', () => {
     const env = interactiveEnv();
     fs.rmSync(repoDir, { recursive: true, force: true });
@@ -265,7 +290,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate(interactiveEnv());
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, '');
-    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n');
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(testDir, 'fetch-feedback.json'), 'utf8')), {
       feedback: '', stdout: '', args: ['fetch', '--quiet', 'origin', '+main:refs/remotes/origin/main'],
       stdio: ['inherit', 'ignore', 'inherit'],
@@ -278,7 +303,6 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       ['before', 'rev-parse --verify HEAD'],
       ['after', 'show HEAD:commands/backup_scope.json'],
       ['after', 'rev-parse --verify HEAD'],
-      ['after', `rev-parse --short=7 --verify ${revisions.FAKE_HEAD_BEFORE}`],
       ['after', 'rev-parse --is-shallow-repository'],
       ['after', 'config --get-regexp ^(extensions\\.partialclone|remote\\..*\\.promisor)$'],
       ['after', `merge-base --is-ancestor ${revisions.FAKE_HEAD_BEFORE} ${revisions.FAKE_HEAD_AFTER}`],
@@ -308,20 +332,59 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       });
     }
   }
+  for (const phase of ['before','after']) for (const status of [130,143]) it(`preserves ${phase}-identity interruption ${status}`, () => {
+    const preload=path.join(testDir,'identity-interruption.cjs');
+    fs.writeFileSync(preload,`const fs=require('fs'),m=require(${JSON.stringify(path.resolve(__dirname,'../commands/repo_update.ts'))}),original=m.readIdentity;
+      m.readIdentity=(...args)=>{if(fs.existsSync(${JSON.stringify(mergeCountPath)})===${phase==='after'})throw Object.assign(Error('identity interrupted'),{status:${status}});return original(...args);};`);
+    const result=runSelfUpdate({...revisions,NODE_OPTIONS:`--require=${preload}`});
+    assert.equal(result.status,status,result.stdout+result.stderr);assert.equal(result.stderr,'');
+    assert.include(result.stdout,'Interrupted. Earlier completed changes remain.');assert.notInclude(result.stdout,'Ballin updated:');
+    if(phase==='before'){assert.isFalse(fs.existsSync(mergeCountPath));assert.notInclude(commandLog(),setupLog());}
+    else assert.include(commandLog(),setupLog());
+  });
   it('reports an unchanged installed revision after still completing setup', () => {
     const result = runSelfUpdate({ ...revisions, FAKE_HEAD_AFTER: revisions.FAKE_HEAD_BEFORE });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, 'Ballin is already up to date.\n');
     assert.include(commandLog(), setupLog());
   });
+  it('reports a release identity transition even when the commit stays the same', () => {
+    const preload = path.join(testDir, 'identity-transition.cjs');
+    fs.writeFileSync(preload, `const fs=require('fs');require(${JSON.stringify(path.resolve(__dirname, '../commands/repo_update.ts'))}).readIdentity=()=>fs.existsSync(${JSON.stringify(mergeCountPath)})?{sha:'a'.repeat(40),label:'v1.0.0',kind:'release',value:'v1.0.0',version:'1.0.0',dirty:false}:{sha:'a'.repeat(40),label:'commit aaaaaaaaaaaa',kind:'sha',value:'a'.repeat(40),version:'development',dirty:false};`);
+    const result = runSelfUpdate({ ...revisions, FAKE_HEAD_AFTER: revisions.FAKE_HEAD_BEFORE, NODE_OPTIONS: `--require=${preload}` });
+    assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, 'Ballin revision identity updated: commit aaaaaaaaaaaa to v1.0.0.\n');
+    assert.include(commandLog(), setupLog());
+  });
+  for (const [from,to] of [
+    ['v1.0.0','v1.1.0'],['v1.0.0','v2.0.0'],['v2.0.0','v1.0.0'],
+    ['branch main','branch main'],['v1.0.0','commit'],['commit','v1.0.0'],
+    ['branch feature/synthetic','commit'],['commit','branch feature/synthetic'],
+    ['development','branch main'],['development (dirty)','commit'],
+    ['branch main (dirty)','commit'],['unknown revision','v1.0.0'],
+  ]) it(`summarizes each side's own identity: ${from} to ${to}`, () => {
+    const identity=(label:string,sha:string)=>{
+      if(label==='unknown revision')return {label,version:'unknown'};
+      const dirty=label.endsWith(' (dirty)'),base=label.replace(/ \(dirty\)$/u,'');
+      const kind=base.startsWith('v')?'release':base.startsWith('branch ')?'branch':base==='commit'?'sha':undefined;
+      return {sha,kind,value:kind==='release'?base:kind==='branch'?base.slice(7):kind==='sha'?sha:undefined,version:kind==='release'?base.slice(1):'development',dirty,
+        label:(kind==='release'?base:kind==='branch'?`${base} (${sha.slice(0,12)})`:`${base} ${sha.slice(0,12)}`)+(dirty?' (dirty)':'')};
+    };
+    const prior=identity(from,revisions.FAKE_HEAD_BEFORE),next=identity(to,revisions.FAKE_HEAD_AFTER);
+    const preload=path.join(testDir,'verified-identity.cjs');
+    fs.writeFileSync(preload,`const fs=require('fs');require(${JSON.stringify(path.resolve(__dirname,'../commands/repo_update.ts'))}).readIdentity=()=>fs.existsSync(${JSON.stringify(mergeCountPath)})?${JSON.stringify(next)}:${JSON.stringify(prior)};`);
+    const env={...revisions,NODE_OPTIONS:`--require=${preload}`,...(from==='unknown revision'?{FAKE_HEAD_BEFORE:'unavailable'}:{})};
+    const result=runSelfUpdate(env);assert.equal(result.status,0,result.stderr);
+    assert.equal(result.stdout,`Ballin updated: ${prior.label} to ${next.label}${from==='unknown revision'?'':' (6 new commits)'}.\n`);
+  });
+
   it('passes the guide that owns both setup recovery anchors', () => {
     const result = runSelfUpdate();
     assert.equal(result.status, 0, result.stderr);
     const setupCall = commandLog().find((line: string) => line.includes('|install_setup:setup ')) ?? '';
     assert.isNotEmpty(setupCall);
-    const guideUrl = setupCall.match(/https:\/\/github\.com\/JBallin\/ballin-scripts\/blob\/main\/docs\/[A-Za-z-]+\.md/u)?.[0] ?? '';
+    const guideUrl = setupCall.match(/getballin\.com\/docs\/[A-Za-z-]+\.html/u)?.[0] ?? '';
     assert.isNotEmpty(guideUrl);
-    const guidePath = new URL(guideUrl).pathname.replace('/JBallin/ballin-scripts/blob/main/', '');
+    const guidePath = new URL('https://' + guideUrl).pathname.slice(1).replace(/\.html$/u, '.md');
     const guide = fs.readFileSync(path.join(__dirname, '..', guidePath), 'utf8');
     assert.match(guide, /^## What installation changes$/mu);
     assert.match(guide, /^## What will installation change\?$/mu);
@@ -330,7 +393,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     it(`reports changed revisions with ${count} locally known new commit${count === 1 ? '' : 's'}`, () => {
       const result = runSelfUpdate({ ...revisions, FAKE_NEW_COMMITS: String(count), GIT_NO_LAZY_FETCH: '0' });
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, `Ballin updated: aaaaaaa to bbbbbbb (${count} new commit${count === 1 ? '' : 's'}).\n`);
+      assert.equal(result.stdout, `Ballin updated: development aaaaaaaaaaaa to development bbbbbbbbbbbb (${count} new commit${count === 1 ? '' : 's'}).\n`);
       const metadata = fs.readFileSync(path.join(testDir, 'local-git.log'), 'utf8').trim().split('\n')
         .filter((line: string) => /^(rev-parse --verify HEAD\||rev-parse --short=7|rev-parse --is-shallow-repository|config --get-regexp|merge-base --is-ancestor|rev-list --count)/u.test(line));
       assert.isAbove(metadata.length, 0);
@@ -347,19 +410,18 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     it(`keeps revision details when a local count is unavailable: ${JSON.stringify(env)}`, () => {
       const result = runSelfUpdate({ ...revisions, ...env });
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, 'Ballin updated: aaaaaaa to bbbbbbb.\n');
+      assert.equal(result.stdout, 'Ballin updated: development aaaaaaaaaaaa to development bbbbbbbbbbbb.\n');
       assert.equal(result.stderr, '');
       assert.equal(commandLog().filter((line: string) => line.includes('|git:fetch ')).length, 1);
     });
   }
   for (const env of [
     { FAKE_HEAD_BEFORE: 'unavailable' }, { FAKE_HEAD_POST_STATUS: '1' },
-    { FAKE_ABBREV_STATUS: '1' }, { FAKE_ABBREV: 'invalid' }, { FAKE_ABBREV: 'ccccccc' },
   ]) {
-    it(`retains generic success when revision details are unavailable: ${JSON.stringify(env)}`, () => {
+    it(`shows unknown only for the unreadable side: ${JSON.stringify(env)}`, () => {
       const result = runSelfUpdate({ ...revisions, ...env });
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, 'Ballin updated.\n');
+      assert.equal(result.stdout, env.FAKE_HEAD_BEFORE ? 'Ballin updated: unknown revision to development bbbbbbbbbbbb.\n' : 'Ballin updated: development aaaaaaaaaaaa to unknown revision.\n');
     });
   }
   it('compares full SHA-256 revisions even when their short prefixes match', () => {
@@ -368,7 +430,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       FAKE_ABBREV_LENGTH: '8',
     });
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Ballin updated: aaaaaaab to aaaaaaac (6 new commits).\n');
+    assert.equal(result.stdout, 'Ballin updated: development aaaaaaabbbbb to development aaaaaaaccccc (6 new commits).\n');
   });
   for (const query of ['merge-base', 'rev-list']) {
     it(`keeps successful revision details when optional ${query} metadata throws`, () => {
@@ -382,7 +444,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       `);
       const result = runSelfUpdate({ ...revisions, NODE_OPTIONS: `--require=${preload}` });
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, 'Ballin updated: aaaaaaa to bbbbbbb.\n');
+      assert.equal(result.stdout, 'Ballin updated: development aaaaaaaaaaaa to development bbbbbbbbbbbb.\n');
       assert.equal(result.stderr, '');
     });
   }
@@ -392,7 +454,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     }, ballinPath, { input: 'fixture-credential\n' });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, 'credential prompt\nsetup warning without newline');
-    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n');
     assert.include(commandLog(), 'fetch-stdin:fixture-credential');
   });
   it('preserves fetch diagnostics without a trailing newline and does not erase them on failure', () => {
@@ -426,12 +488,12 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.equal(result.stderr, '');
     assert.include(result.stdout, '==> Updating Ballin');
     assert.equal(result.stdout.split(updateLine).length - 1, 1);
-    assert.include(result.stdout, 'Ballin updated.');
+    assert.include(result.stdout, 'Ballin updated:');
     assert.include(result.stdout, '==> Checking Ballin readiness');
     assert.notInclude(result.stdout, 'Updating...');
   });
 
-  const reviewLine = 'Review: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md\n';
+  const reviewLine = 'i Review: getballin.com/docs/backup-sources.html\n';
   const changedLine = 'Supported backup sources or collection scope changed.\n';
   const unavailableLine = 'Unable to compare backup sources and collection scope across this update.\n';
   const consentLine = 'Your sensitive-source opt-in remains enabled across updates and covers current and future supported sources.\n';
@@ -451,7 +513,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     fs.writeFileSync(path.join(repoDir, 'commands/backup_snapshots.ts'), 'throw new Error("must not execute snapshot source");');
     const result = runSelfUpdate();
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n');
     assert.notInclude(commandLog(true).join('\n'), 'backup_snapshots.ts');
     assert.lengthOf(commandLog(true).filter((line: string) => line.includes('show HEAD:commands/backup_scope.json')), 2);
     assert.isTrue(fs.readFileSync(path.join(testDir, 'local-git.log'), 'utf8').split('\n')
@@ -488,7 +550,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       saveConsent(true);
       const result = runSelfUpdate({ FAKE_REAL_GIT: realGit, FAKE_REAL_BEFORE: before });
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, 'Ballin updated.\n' + (change === 'implementation' ? ''
+      assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n' + (change === 'implementation' ? ''
         : (change === 'legacy' ? unavailableLine : changedLine) + consentLine + reviewLine));
     });
   }
@@ -504,7 +566,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     fs.writeFileSync(path.join(testDir, 'after-scope.json'), JSON.stringify(Object.fromEntries(Object.entries(scope).reverse())));
     const result = runSelfUpdate();
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n');
   });
 
   for (const [name, change] of [
@@ -522,7 +584,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       changeScope(change);
       const result = runSelfUpdate();
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, 'Ballin updated.\n' + changedLine + reviewLine);
+      assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n' + changedLine + reviewLine);
       assert.equal(result.stderr, '');
     });
   }
@@ -533,7 +595,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       changeScope((scope) => { scope.sources.pop(); });
       const result = runSelfUpdate();
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, 'Ballin updated.\n' + changedLine
+      assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n' + changedLine
         + ([true, 'true'].includes(consent as boolean | string) ? consentLine : '') + reviewLine);
       assert.equal(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'), contents);
     });
@@ -543,7 +605,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     saveConsent(true);
     const result = runSelfUpdate();
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n');
   });
 
   for (const setting of ['FAKE_SOURCE_PRE_STATUS', 'FAKE_SOURCE_POST_STATUS']) {
@@ -552,7 +614,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
         saveConsent(consent);
         const result = runSelfUpdate({ [setting]: '1' });
         assert.equal(result.status, 0, result.stderr);
-        assert.equal(result.stdout, 'Ballin updated.\n' + unavailableLine + (consent ? consentLine : '') + reviewLine);
+        assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n' + unavailableLine + (consent ? consentLine : '') + reviewLine);
         assert.equal(result.stderr, '');
       });
     }
@@ -563,7 +625,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       fs.writeFileSync(path.join(testDir, 'after-scope.json'), contents);
       const result = runSelfUpdate();
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, 'Ballin updated.\n' + unavailableLine + reviewLine);
+      assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n' + unavailableLine + reviewLine);
     });
   }
 
@@ -606,7 +668,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
         }
         const result = runSelfUpdate();
         assert.equal(result.status, 0, result.stderr);
-        assert.equal(result.stdout, 'Ballin updated.\n' + unavailableLine + reviewLine);
+        assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n' + unavailableLine + reviewLine);
         assert.equal(result.stderr, '');
       });
     }
@@ -617,7 +679,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     fs.writeFileSync(path.join(repoDir, 'ballin.config.json'), 'invalid JSON');
     const result = runSelfUpdate();
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Ballin updated.\n' + changedLine + reviewLine);
+    assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n' + changedLine + reviewLine);
   });
 
   it('ignores comparison process exceptions without changing update success', () => {
@@ -631,7 +693,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     `);
     const result = runSelfUpdate({ NODE_OPTIONS: `--require=${preload}` });
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Ballin updated.\n' + unavailableLine + reviewLine);
+    assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n' + unavailableLine + reviewLine);
   });
 
   it('does not disclose scope changes or consent when refresh failed', () => {
@@ -647,7 +709,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate();
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
@@ -684,7 +746,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'setup output\nBallin updated.\n');
+    assert.equal(result.stdout, 'setup output\nBallin updated: unknown revision to unknown revision.\n');
     assert.equal(result.stderr, '');
   });
 
@@ -696,7 +758,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     );
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n');
     assert.equal(result.stderr, 'credential prompt\n');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
@@ -716,7 +778,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     const result = runSelfUpdate({}, symlinkPath);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, 'Ballin updated.\n');
+    assert.equal(result.stdout, 'Ballin updated: unknown revision to unknown revision.\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), [
       `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
@@ -762,7 +824,7 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
       assert.deepEqual(events.map(({ schemaVersion, command, status }) => ({ schemaVersion, command, status })),
         interrupted ? [] : [{ schemaVersion: 1, command: 'ballin self-update', status: status === 0 ? 'success' : 'failure' }]);
       assert.equal(result.stdout, 'setup output\n' + (interrupted
-        ? 'Interrupted. Earlier completed changes remain.\n' : status === 0 ? 'Ballin updated.\n' : ''));
+        ? 'Interrupted. Earlier completed changes remain.\n' : status === 0 ? 'Ballin updated: unknown revision to unknown revision.\n' : ''));
       if (interrupted) {
         const calls = fs.readFileSync(commandLogPath, 'utf8').trim().split('\n');
         assert.equal(calls.at(-1), setupLog());
@@ -836,204 +898,11 @@ process.exit(Number(process.env.FAKE_SETUP_STATUS || '0'));
     assert.deepEqual(commandLog(), []);
   });
 
-  it('stashes, retries checkout main, merges, and runs setup when initial checkout is blocked', () => {
-    const result = runSelfUpdate({ FAKE_GIT_FIRST_CHECKOUT_STATUS: '27' });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(
-      result.stdout,
-      'git checkout main failed. stashing changes and trying again...\nBallin updated.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      setupLog(),
-    ]);
-  });
-
-  it('stops before merge and setup when checkout recovery cannot stash changes', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_CHECKOUT_STATUS: '27',
-      FAKE_GIT_STASH_STATUS: '28',
-    });
-
+  it('does not attempt recovery after the selected installer refuses a transition', () => {
+    const result = runSelfUpdate({ FAKE_GIT_FIRST_CHECKOUT_STATUS: '1' });
     assert.equal(result.status, 1);
-    assert.equal(
-      result.stdout,
-      'git checkout main failed. stashing changes and trying again...\n'
-        + 'git stash failed during checkout recovery.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-    ]);
-  });
-
-  it('stops before merge and setup when checkout still fails after stashing', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_CHECKOUT_STATUS: '27',
-      FAKE_GIT_RETRY_CHECKOUT_STATUS: '28',
-    });
-
-    assert.equal(result.status, 1);
-    assert.equal(
-      result.stdout,
-      'git checkout main failed. stashing changes and trying again...\n'
-        + 'git checkout failed during checkout recovery.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-      `${repoDir}|git:checkout main`,
-    ]);
-  });
-
-  it('stashes, checks out main, retries merge, and runs setup after an initial merge failure', () => {
-    const result = runSelfUpdate({ FAKE_GIT_FIRST_MERGE_STATUS: '24' });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(
-      result.stdout,
-      'git merge failed. stashing changes and trying again...\nBallin updated.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      setupLog(),
-    ]);
-  });
-
-  it('aborts an in-progress failed merge before stashing changes during recovery', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_MERGE_STATUS: '24',
-      FAKE_GIT_MERGE_IN_PROGRESS: '1',
-    });
-
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(
-      result.stdout,
-      'git merge failed. stashing changes and trying again...\nBallin updated.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:merge --abort`,
-      `${repoDir}|git:stash push --include-untracked`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      setupLog(),
-    ]);
-  });
-
-  it('stops before stashing when aborting an in-progress failed merge fails', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_MERGE_STATUS: '24',
-      FAKE_GIT_MERGE_IN_PROGRESS: '1',
-      FAKE_GIT_MERGE_ABORT_STATUS: '29',
-    });
-
-    assert.equal(result.status, 1);
-    assert.equal(
-      result.stdout,
-      'git merge failed. stashing changes and trying again...\n'
-        + 'git merge abort failed during merge recovery.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:merge --abort`,
-    ]);
-  });
-
-  it('stops before setup when the retry merge fails', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_MERGE_STATUS: '24',
-      FAKE_GIT_RETRY_MERGE_STATUS: '25',
-    });
-
-    assert.equal(result.status, 1);
-    assert.equal(
-      result.stdout,
-      'git merge failed. stashing changes and trying again...\n'
-        + 'git merge failed during merge recovery.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-    ]);
-  });
-
-  it('stops before retry merge and setup when the fallback stash path fails', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_MERGE_STATUS: '24',
-      FAKE_GIT_STASH_STATUS: '26',
-    });
-
-    assert.equal(result.status, 1);
-    assert.equal(
-      result.stdout,
-      'git merge failed. stashing changes and trying again...\n'
-        + 'git stash failed during merge recovery.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-    ]);
-  });
-
-  it('stops before retry merge and setup when the fallback checkout fails', () => {
-    const result = runSelfUpdate({
-      FAKE_GIT_FIRST_MERGE_STATUS: '24',
-      FAKE_GIT_RETRY_CHECKOUT_STATUS: '27',
-    });
-
-    assert.equal(result.status, 1);
-    assert.equal(
-      result.stdout,
-      'git merge failed. stashing changes and trying again...\n'
-        + 'git checkout failed during merge recovery.\n',
-    );
-    assert.equal(result.stderr, '');
-    assert.deepEqual(commandLog(), [
-      `${repoDir}|git:fetch --quiet origin +main:refs/remotes/origin/main`,
-      `${repoDir}|git:checkout main`,
-      `${repoDir}|git:merge origin/main`,
-      `${repoDir}|git:rev-parse -q --verify MERGE_HEAD`,
-      `${repoDir}|git:stash push --include-untracked`,
-      `${repoDir}|git:checkout main`,
-    ]);
+    assert.notInclude(commandLog().join('\n'), 'git:stash');
+    assert.notInclude(commandLog().join('\n'), 'git:merge');
+    assert.notInclude(commandLog().join('\n'), 'install_setup:');
   });
 });

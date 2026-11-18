@@ -269,17 +269,17 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
     ['help', 'backup', 'setup', 'repository'], ['help', 'backup', 'read', 'zshrc.sh'],
     ['help', 'config', 'missing'], ['help', 'doctor', '--help'],
   ]) {
-    it(`preserves overview output and analytics eligibility for unsupported help route ${JSON.stringify(args)}`, () => {
-      const expectedOutput = runBallin(['help']).stdout;
+    it(`rejects unsupported help without creating analytics identity ${JSON.stringify(args)}`, () => {
       writeConfig({ analytics: { enabled: 'true' } });
       const installIdPath = path.join(tempDir, '.analytics', 'install-id');
       const result = runBallin(args, {
         BALLIN_NO_ANALYTICS: '',
         BALLIN_NO_COMMAND_ANALYTICS: '1',
       });
-      assertHelpOutput(result);
-      assert.equal(result.stdout, expectedOutput);
-      assert.match(fs.readFileSync(installIdPath, 'utf8').trim(), /^[0-9a-f-]{36}$/);
+      assert.equal(result.status, 2);
+      assert.equal(result.stdout, '');
+      assert.include(result.stderr, 'Unknown or unsupported help target.');
+      assert.isFalse(fs.existsSync(installIdPath));
       assert.deepEqual(commandLog(), []);
     });
   }
@@ -305,7 +305,11 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
         assert.include(result.stdout, `ballin ${command}`);
         assert.notInclude(result.stdout, 'ballin config help');
         if (command === 'doctor') assert.include(result.stdout, 'ballin doctor [--verbose]');
-        if (command === 'self-update') assert.include(result.stdout, 'Update Ballin itself.');
+        if (command === 'self-update') {
+          assert.include(result.stdout, 'Update Ballin itself.');
+          assert.notInclude(result.stdout, 'installer');
+          assert.include(result.stdout, '#health-and-recovery');
+        }
         if (command === 'uninstall') assert.include(result.stdout, 'Remove Ballin-owned command links and the local `ballin-scripts` checkout.');
         if (command === 'update') assert.include(result.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get update` to inspect settings.');
         if (command === 'setup') assert.include(result.stdout.replace(/\s+/gu, ' '), 'Use `ballin config get/set/reset` for direct configuration.');
@@ -625,7 +629,7 @@ require('https').request = () => {
         const ordinary = runBallin(args);
         const interactive = runBallin(args, interactiveEnv());
         assert.equal(interactive.status, healthy ? 0 : 1);
-        assert.equal(interactive.stdout, ordinary.stdout.replaceAll('`ballin backup setup`', '\x1b[1mballin backup setup\x1b[0m'));
+        assert.equal(interactive.stdout, ordinary.stdout.replaceAll('`ballin backup setup`', '\x1b[1mballin backup setup\x1b[0m').replace('✓ ', '\x1b[0;32m✓\x1b[0m '));
         assert.equal(interactive.stderr, 'Checking readiness...\r\x1b[2K');
       });
     }
@@ -638,7 +642,8 @@ require('https').request = () => {
       if (mode === 'NO_COLOR') env.NO_COLOR = '1';
       const result = runBallin(['doctor'], env);
       assert.equal(result.status, ordinary.status);
-      assert.equal(result.stdout, ordinary.stdout);
+      assert.equal(result.stdout, ['stdin', 'stderr', 'narrow'].includes(mode)
+        ? ordinary.stdout.replace('✓ ', '\x1b[0;32m✓\x1b[0m ') : ordinary.stdout);
       assert.equal(result.stderr, ordinary.stderr);
     });
   }
@@ -656,7 +661,7 @@ require('https').request = () => {
     const result = runBallin(['doctor']);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, '😎 You\'re ballin.\n');
+    assert.equal(result.stdout, '✓ You\'re ballin.\n');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), []);
   });
@@ -671,7 +676,7 @@ require('https').request = () => {
     assert.include(result.stdout, 'OK    Config readability:');
     assert.include(result.stdout, 'INFO  Optional backup:');
     assert.include(result.stdout, 'Result: Ballin-managed environment health looks good.');
-    assert.notInclude(result.stdout, '😎 You\'re ballin.');
+    assert.notInclude(result.stdout, '✓ You\'re ballin.');
     assert.equal(result.stderr, '');
     assert.deepEqual(commandLog(), []);
   });
@@ -689,7 +694,7 @@ require('https').request = () => {
 
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout, 'WARN  Config readability: Config is readable but missing sections: `analytics`.');
-    assert.include(result.stdout, '\nNext: Run `ballin config reset` to recreate the config.');
+    assert.include(result.stdout, '\nNext: Repair the reported config problem while preserving saved settings and backup linkage, then rerun `ballin doctor`.');
     assert.notInclude(result.stdout, '      Next:');
     assert.notInclude(result.stdout, 'OK    Node.js runtime:');
     assert.notInclude(result.stdout, 'OK    Command shims on PATH:');
@@ -771,7 +776,7 @@ require('https').request = () => {
 
     assert.equal(missingConfig.status, 1);
     assert.include(missingConfig.stdout, 'ERROR Config readability: Unable to read');
-    assert.include(missingConfig.stdout, 'Next: Run `ballin config reset` to recreate the config.');
+    assert.include(missingConfig.stdout, 'Next: Repair the reported config problem while preserving saved settings and backup linkage, then rerun `ballin doctor`.');
   });
 
   it('rejects invalid doctor usage', () => {

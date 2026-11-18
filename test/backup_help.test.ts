@@ -128,7 +128,7 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
 
   it('shows operation-specific syntax and backup consequences', () => {
     for (const [command, details] of Object.entries({
-      setup: ['setup [repository-name]', 'confirm the destination', 'sensitive sources', 'Existing backup:', 'disconnect before choosing', '#optional-backup-setup-and-reconnect', 'docs/backup-sources.md'],
+      setup: ['setup [repository-name]', 'confirm the destination', 'sensitive sources', 'Existing backup:', 'disconnect before choosing', '#optional-backup-setup-and-reconnect', 'docs/backup-sources.html'],
       open: ['Open the configured backup and its saved history in your browser', 'authentication for the selected GitHub host and remote access'],
       list: ['List supported snapshots', 'remote read access', 'does not collect local backup sources'],
       read: ['read <snapshot> [--list | --file <path>]', 'Options for bundle snapshots:', 'original bytes', 'Without a snapshot selector', 'ballin backup list', 'Examples:', '#inspect-saved-backups'],
@@ -176,10 +176,10 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
           assert.equal(result.stdout.includes('\x1b['), mode.name === 'styled TTY');
           for (const line of plain.split('\n')) {
             // Usage is deliberately preformatted; indivisible URLs and syntax may overflow.
-            if (line.trimStart().startsWith('ballin ') || line.length <= Math.min(columns, 80)) continue;
+            if (line.trimStart().startsWith('ballin ') || /^i [^:]+: getballin\.com\//u.test(line) || line.length <= Math.min(columns, 80)) continue;
             assert.isTrue(line.trim().split(' ').some((word: string) => word.length > Math.min(columns, 80)), line);
           }
-          for (const url of baseline.match(/https:\/\/\S+/gu) ?? []) assert.include(plain, url);
+          for (const url of baseline.match(/getballin\.com\/\S+/gu) ?? []) assert.include(plain, url);
           assert.isFalse(fs.existsSync(attemptsPath));
           assert.deepEqual(snapshot(), before);
         });
@@ -188,14 +188,27 @@ for (const name of ['readPromptLine', 'readYesNo', 'promptInputState']) helpers[
   }
 
   for (const args of [[], ['setup'], ['backup', 'setup'], ['backup', 'read'], ['config'], ['uninstall']]) {
-    it(`labels documentation links on a separate line for ${['help', ...args].join(' ')}`, () => {
+    it(`keeps documentation links in one logical info row for ${['help', ...args].join(' ')}`, () => {
       const result = run(['help', ...args]);
       assert.equal(result.status, 0, result.stderr);
-      const links = result.stdout.match(/🔗 [^\n]+:\nhttps:\/\/[^\n]+/gu) ?? [];
+      const links = result.stdout.match(/i [^\n]+: getballin\.com\/[^\n]*/gu) ?? [];
       assert.lengthOf(links, args.join(' ') === 'backup setup' ? 2 : 1);
     });
   }
 
+  for (const program of ['Apple_Terminal', 'iTerm.app', 'unknown', '']) {
+    it(`keeps the main-help homepage visible with terminal-specific slash (${program || 'missing identity'})`, () => {
+      const before = snapshot();
+      const result = run(['help'], { HELP_TTY: '1', TERM: 'xterm-256color', TERM_PROGRAM: program, TERM_PROGRAM_VERSION: '3.5.0' });
+      assert.equal(result.status, 0, result.stderr);
+      const address = program === 'Apple_Terminal' ? 'getballin.com' : 'getballin.com/';
+      assert.include(result.stdout, '\x1b[0;34mi\x1b[0m Project and documentation: \x1b[34m' + address + '\x1b[0m\n');
+      assert.notInclude(result.stdout, 'https://getballin.com');
+      assert.notInclude(result.stdout, '\x1b]');
+      assert.isFalse(fs.existsSync(attemptsPath));
+      assert.deepEqual(snapshot(), before);
+    });
+  }
   it('keeps configuration examples concrete and explains reset scope', () => {
     const config = run(['config', '--help']).stdout.replace(/\s+/gu, ' ');
     assert.include(config, 'Reset replaces all saved settings with defaults, including backup linkage; remote backups remain unchanged.');

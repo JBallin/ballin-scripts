@@ -16,6 +16,28 @@ tart run ballin-test
 
 Follow the [installation instructions](../README.md#installation) in the VM.
 
+## Prelaunch entrypoint recovery
+
+Protocol-1 prelaunch entrypoints cannot select protocol-2 revisions, including
+with an explicit SHA. They stop at the unsupported-contract error. This is a
+candidate-testing boundary; normal maintenance uses `ballin self-update`.
+
+To test recovery in a disposable VM, preserve the existing checkout, config and
+cache first. Use the entrypoint from the reviewed protocol-2 candidate itself,
+selecting that same full commit:
+
+```shell
+CANDIDATE_SHA=FULL_REVIEWED_COMMIT_SHA
+/bin/bash -c "$(curl -q -fsSL "https://raw.githubusercontent.com/JBallin/ballin-scripts/$CANDIDATE_SHA/install.sh")" ballin-install --sha "$CANDIDATE_SHA"
+```
+
+Verify that declining preserves the checkout and local data, accepting installs
+the exact candidate and refreshes setup, and subsequent `ballin self-update`
+uses the new contract. An explicit SHA remains a commit selection; a later track
+change still requires its own confirmation. Also check dirty-checkout refusal
+and interrupted or failed setup recovery. Record exact revisions, outcomes and
+limitations; do not count staged output as a real installation.
+
 ## Clean up
 
 Shut down the VM, then delete it from Terminal on your Mac:

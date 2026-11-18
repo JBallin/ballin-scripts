@@ -1,3 +1,4 @@
+const { terminalProse } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const {
@@ -129,8 +130,7 @@ const runUninstallCommand = (): void => {
   writeStdoutLine('Removed ~/.ballin-scripts and the ballin command links.');
   writeStdoutLine('Other tools and shell settings were left unchanged.');
   writeStdoutLine();
-  writeStdoutLine('Removal details:');
-  writeStdoutLine('https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#uninstall');
+  writeStdoutLine(terminalProse('i Removal details: getballin.com/docs/installation.html#uninstall'));
 };
 
 module.exports = {

@@ -68,8 +68,7 @@ Commands:
 
 You can also append \`--help\` to any command.
 
-🔗 Project and documentation:
-https://github.com/JBallin/ballin-scripts
+i Project and documentation: getballin.com/
 `;
 const updateHelp = `Usage: ballin update
 
@@ -107,11 +106,9 @@ Existing backup: Validate the saved repository and review sensitive-source inclu
 
 Authenticate gh for the selected host before setup. Backups belong to your individual account on that host. Use a hostname, not a URL. Review local Ballin preferences with \`ballin setup\`.
 
-🔗 Setup and recovery:
-https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect
+i Setup and recovery: getballin.com/docs/installation.html#optional-backup-setup-and-reconnect
 
-🔗 Backup sources and sensitivity:
-https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md
+i Backup sources and sensitivity: getballin.com/docs/backup-sources.html
 `,
   open: `Usage: ballin backup open
 
@@ -140,8 +137,7 @@ Examples:
 
 Requires remote read access. Use \`ballin backup list\` to find supported snapshot names. Without a snapshot selector, report the missing argument and list saved options when readable.
 
-🔗 Inspect saved backups:
-https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#inspect-saved-backups
+i Inspect saved backups: getballin.com/docs/installation.html#inspect-saved-backups
 `,
   disconnect: `Usage: ballin backup disconnect
 
@@ -162,14 +158,19 @@ Options:
 const selfUpdateHelp = `Usage: ballin self-update
 
 Update Ballin itself.
+
+Use the default update selection. Ballin asks before revision or track changes that require consent.
+
+Local settings are preserved; conflicting local changes stop the update.
+
+i Updates and recovery: getballin.com/docs/installation.html#health-and-recovery
 `;
 
 const uninstallHelp = `Usage: ballin uninstall
 
 Remove Ballin-owned command links and the local \`ballin-scripts\` checkout.
 
-🔗 Removal details:
-https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#uninstall
+i Removal details: getballin.com/docs/installation.html#uninstall
 `;
 
 const isCommandHelp = (args: string[]): boolean => (
@@ -355,6 +356,11 @@ const runBallinCli = (): void => {
       || (args[1] === 'config' && isConfigOperationName(args[2])))) {
       args = [args[1], args[2], commandHelpOptionName];
     }
+  }
+  if (args.length > 1 && ['help', commandHelpOptionName].includes(args[0])) {
+    writeStderr(`Unknown or unsupported help target.\nTry: ${terminalCommand('ballin help', process.stderr)}\n`);
+    process.exitCode = 2;
+    return;
   }
   if (args.length === 0 || (args.length === 1 && ['help', commandHelpOptionName].includes(args[0]))
     || isCommandHelp(args) || backupHelpCommand(args) !== undefined || isPositionalHelp(args) || isConfigCommandHelp(args)) {
