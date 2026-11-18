@@ -24,6 +24,7 @@ For the project overview, see the [main README](../README.md).
 
 | Guide | Purpose |
 | --- | --- |
+| [Development guide](development.md) | Code layout, synchronization points, and documentation conventions. |
 | [Testing and coverage](testing.md) | Test isolation, coverage comparisons, and runtime and platform limits. |
 | [Installation testing](installation-testing.md) | Test Ballin installation in a macOS VM. |
 | [Code scanning](code-scanning.md) | Advanced CodeQL coverage, fork trust boundary, verification, and recovery. |

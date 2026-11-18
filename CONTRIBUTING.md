@@ -35,9 +35,9 @@ $ git push --set-upstream fork "$BRANCH_NAME"
 Open a pull request from your branch to `JBallin/ballin-scripts` and summarize
 the change and how you tested it.
 
-For faster focused testing and the additional hosted CI checks, see
-[Testing and coverage](docs/testing.md). Agent operational instructions live in
-[AGENTS.md](AGENTS.md).
+For repository structure and changes that must stay synchronized, see the
+[Development guide](docs/development.md). For focused testing, isolation, and
+validation gates, see [Testing and coverage](docs/testing.md).
 
 For deeper user and maintainer documentation, see the
 [documentation index](docs/README.md).

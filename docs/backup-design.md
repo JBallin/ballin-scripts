@@ -674,8 +674,8 @@ path replacement through writable ancestors.
 CLI lifecycle, consent, ruleset reconciliation and failure recovery. Installer
 walkthroughs, doctor fixtures, and automated tests use temporary roots and complete
 child environments. See [Testing and coverage](testing.md) for commands and
-[Testing and safety](../AGENTS.md#testing-and-safety) for agent operational
-safeguards.
+[Test environment and analytics safety](testing.md#test-environment-and-analytics-safety)
+for isolation requirements.
 
 Automated tests prove the exact policy request and Ballin's surrounding behavior;
 they do not prove GitHub's live enforcement. Separately authorized disposable
