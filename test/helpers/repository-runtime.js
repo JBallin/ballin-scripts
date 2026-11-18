@@ -203,6 +203,7 @@ const requestFixture = (state, args, options = {}) => {
     for (const addition of input.fileChanges.additions) files[addition.path] = addition.contents;
     for (const deletion of input.fileChanges.deletions ?? []) delete files[deletion.path];
     const created = commitFixture(state, files);
+    if (fault.afterPublishTransport) fault.transport = fault.afterPublishTransport;
     if (fault.publish === 'orphan') { state.head = before; return reply({}, 1); }
     if (fault.publish === 'wrong-readback') commitFixture(state, { ...files, extra: Buffer.from('unexpected\n').toString('base64') });
     if (fault.publish === 'ambiguous') return reply({}, 1);
