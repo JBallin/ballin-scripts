@@ -8,6 +8,12 @@ The private package's `package.json.version` is the canonical release version;
 field proves that a checkout is a published release. Release identity still
 requires the verified published GitHub Release and its exact tag and commit.
 
+Use this guide for the product release, then follow the
+[site/gallery route](website.md#start-to-finish-workflow) if publishing examples.
+Docs-only changes reuse the pin; an initial gallery and a selected refresh have
+separate capture/packaging paths. Reuse recorded approvals and bring the maintainer
+in for missing authority, publication decisions or access/policy changes.
+
 ## Prepare
 
 Run `npm run release:prepare -- 1.0.0` for the intended version. The command updates
@@ -29,9 +35,14 @@ override. That URL is not usable until the approved release is published. Runnin
 scripts refuse missing or unpublished releases before setup mutations.
 
 Submit the preparation diff through a separately authorized PR and normal review.
-After merging, validate the exact merged SHA, including disposable macOS VM
-installation as described in [Installation testing](installation-testing.md).
-Do not substitute a reviewed pre-merge PR head for the merged candidate.
+After merging, validate the exact merged SHA in a disposable macOS VM under
+[Installation testing](installation-testing.md). **Before publication**, use the
+entrypoint from that merged commit and select the same full `--sha`; see
+[revision selectors](installation.md#selecting-a-revision) and the
+[exact-candidate entrypoint recipe](installation-testing.md#prelaunch-entrypoint-recovery).
+The prepared README's versioned stable URL points at an unpublished release and
+is not the pre-publication test command. Do not substitute a reviewed pre-merge
+head, and do not count an explicit-SHA install as proof of stable selection.
 
 ## Analytics coordination
 
@@ -45,10 +56,14 @@ A code review or release-preparation command does not itself authorize deploymen
 ## Approve and publish
 
 Present the proposed version, exact tested merged SHA, and complete release notes
-in chat. Obtain explicit approval of that specific publication request before
-creating a tag or GitHub Release. A thumbs-up on that request is approval;
+for maintainer review. Obtain explicit approval of that specific publication
+request before creating a tag or GitHub Release. A thumbs-up on that request is approval;
 approval to implement or merge is not. A changed SHA, version, or notes requires
 an updated approval.
+
+If later gallery attachment is planned, [verify release mutability under the
+effective policy](website.md#attach-to-the-actual-product-release) before publishing;
+if it cannot remain mutable, stop for a reviewed resolution.
 
 Immediately before publication, recheck the approved SHA, intended tag, notes,
 and existing GitHub state with ordinary Git and `gh` commands. Refuse conflicting
@@ -58,7 +73,31 @@ using normal `git`/`gh` operations. No custom publishing framework is required.
 
 Verify the remote tag resolves to the approved commit, the release is published
 and stable, and the notes match approval. If an operation fails partially or its
-outcome is uncertain, inspect existing state before retrying. Finally verify a
-fresh versioned install and existing-install self-update select the published
-release and preserve local state. GitHub Releases are the release-note history;
+outcome is uncertain, inspect existing state before retrying. **After publication**,
+verify a fresh stable/versioned install and an existing stable-track installation's
+self-update select the published release and preserve local state. An explicit-SHA
+candidate installation remains commit-selected; it does not silently become a
+stable-track installation. Test a track change separately with its confirmation,
+using the documented selectors. GitHub Releases are the release-note history;
 do not maintain a duplicate changelog.
+
+For gallery publication, continue with the
+[ordered site/gallery route](website.md#start-to-finish-workflow).
+The [tooling recipes](../tools/output-gallery/README.md#package-approved-examples)
+own generation, selection, ZIP naming, replacement and offline candidate review;
+[site maintenance](website.md#attach-to-the-actual-product-release) owns release
+attachment, real pin verification and Netlify publication. Whenever the canonical
+Update example changes, exporting and updating the README's matching embedded
+text from that same bundle is a required dependency, not later cleanup. Coordinate
+it with pin activation; first image links wait for verified public delivery.
+For a partial gallery refresh, put the
+[replaced/retained summary and local-review results](../tools/output-gallery/README.md#review-the-refresh-summary)
+in the review handoff so reviewers can go directly to the replaced examples.
+
+Before a merge, account for automatic Netlify and Worker deployment triggers, not
+only manual release/deploy commands. Record completed steps, tested SHA, approved
+version/notes, release/asset identity and hashes, verification and next blocked
+action. On resume, recheck external state before retrying. Preserve a known-good
+pin/deployment and use the [site recovery procedure](website.md#deploy-and-recover)
+for gallery failures; a gallery refresh is not a new release or full manual retest
+requirement for every product change.

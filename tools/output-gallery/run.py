@@ -103,12 +103,53 @@ def plain_text(ansi):
     return text
 
 
+def update_example(staged, sample):
+    """Reuse #667's static styling with the gallery's reviewed pure formatter."""
+    text = plain_text(sample.read_text())
+    if not text.startswith('$ ballin update\n'):
+        raise ValueError('Update example must start with its illustrative command')
+    trusted = json.loads((LEGACY / 'generation-runtime.json').read_text())
+    # This path executes only terminalStyle.ts. Full-gallery generation also
+    # checks the complete formatter profile in build.py before reaching here.
+    profiles = [trusted] + trusted.get('reviewedProfiles', [])
+    if not any(digest(staged / 'terminalStyle.ts') == profile['executableHashes']['terminalStyle.ts']
+               for profile in profiles):
+        raise ValueError('Unreviewed gallery runtime: terminalStyle.ts')
+    source = (staged / 'source-evidence/commands/update.ts').read_text()
+    headings = [line[4:] for line in text.splitlines() if line.startswith('==> ')]
+    # Homebrew supplies its own first heading; all Ballin phase labels/order must
+    # match the immutable product snapshot rather than an invented successful run.
+    if not headings or headings[0] != 'Updating Homebrew...' or "runIntegrationCommand('brew', ['update']" not in source:
+        raise ValueError('Review Homebrew update example against product source')
+    positions = [source.index("progress('" + heading + "')") for heading in headings[1:]]
+    if positions != sorted(positions):
+        raise ValueError('Update example phase order differs from product source')
+    script = r"""
+const fs = require('node:fs');
+const t = require(process.argv[1]);
+const env = { TERM: 'xterm-256color' }, stream = { isTTY: true };
+const lines = fs.readFileSync(0, 'utf8').trimEnd().split('\n').map(line => {
+  if (line.startsWith('$ ')) return t.terminalEmphasis(line, 'bold', stream, env);
+  if (line.startsWith('==> ')) return t.terminalHeading(line.slice(4), stream, env);
+  if (line.startsWith('✓ ')) return '\x1b[0;32m✓\x1b[0m ' + line.slice(2);
+  const changed = line.match(/^([+~-]) (.+)$/u);
+  return changed ? changed[1] + ' ' + t.terminalEmphasis(changed[2], 'bold', stream, env) : line;
+});
+process.stdout.write(lines.join('\n') + '\n');
+"""
+    return subprocess.check_output(['node', '-e', script, str((staged / 'terminalStyle.ts').resolve())],
+                                   input=text.encode(), timeout=15).decode()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', required=True, help='Full immutable product commit SHA available locally')
     parser.add_argument('--output', type=Path, help='New local output directory (default: ignored .output-gallery/<source>)')
     parser.add_argument('--captures', type=Path, help='Optional reviewed VM capture manifest; see README')
+    parser.add_argument('--readme-example-only', action='store_true', help='Render only the canonical staged Update illustration')
     args = parser.parse_args()
+    if args.readme_example_only and args.captures:
+        parser.error('--readme-example-only does not import VM captures')
     if not re.fullmatch('[0-9a-f]{40}', args.source):
         parser.error('--source must be a full immutable commit SHA')
     resolved = subprocess.check_output(['git', 'rev-parse', args.source + '^{commit}'], cwd=ROOT, text=True).strip()
@@ -127,25 +168,38 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     # Retain failed builds for diagnosis, clearly separate from successful output.
     work = Path(tempfile.mkdtemp(prefix='.gallery-build-', dir=output.parent))
-    for name in ['run.py', 'render.swift', 'README.md']:
+    for name in ['run.py', 'render.swift', 'README.md', 'update-example.txt']:
         shutil.copy2(TOOLS / name, work / name)
     for name in ['build.py', 'verify.py', 'generation-runtime.json']:
         shutil.copy2(LEGACY / name, work / name)
     staged = work / 'staged'
     staged.mkdir()
     shutil.copy2(work / 'verify.py', staged)
-    run(['python3', str(work / 'build.py'), '--root', str(ROOT), '--output', str(staged), '--candidate', args.source])
-    run(['python3', str(staged / 'verify.py')], stdout=subprocess.PIPE)
     entries = []
-    # Each preserved scenario is its own readable group; full raw captures remain intact.
-    ansi = (staged / 'terminal-preview.ansi').read_text()
-    sections = re.split(r'(?=\n==========================================================================\n)', ansi)
-    if len(sections) != len(STAGED_TOPICS):
-        raise ValueError('Review gallery index topics after changing staged sections')
-    for index, section in enumerate(sections):
-        entries.append({'id': f'staged-{index:02}', 'kind': 'staged', 'ansi': section,
-                        'category': STAGED_TOPICS[index][0], 'title': STAGED_TOPICS[index][1],
-                        'sourceRevision': args.source, 'edits': 'Source-informed synthetic prompts, answers and outcomes; inline labels disclose selected excerpts/omissions. No live execution.'})
+    if args.readme_example_only:
+        # Read candidate source as data. update_example checks the formatter
+        # against the independently reviewed runtime pin before loading it.
+        for name in ['commands/terminalStyle.ts', 'commands/update.ts']:
+            data = subprocess.check_output(['git', 'show', args.source + ':' + name], cwd=ROOT)
+            target = staged / ('terminalStyle.ts' if name.endswith('terminalStyle.ts') else 'source-evidence/' + name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+    else:
+        run(['python3', str(work / 'build.py'), '--root', str(ROOT), '--output', str(staged), '--candidate', args.source])
+        run(['python3', str(staged / 'verify.py')], stdout=subprocess.PIPE)
+        # Each preserved scenario is its own readable group; full raw captures remain intact.
+        ansi = (staged / 'terminal-preview.ansi').read_text()
+        sections = re.split(r'(?=\n==========================================================================\n)', ansi)
+        if len(sections) != len(STAGED_TOPICS):
+            raise ValueError('Review gallery index topics after changing staged sections')
+        for index, section in enumerate(sections):
+            entries.append({'id': f'staged-{index:02}', 'kind': 'staged', 'ansi': section,
+                            'category': STAGED_TOPICS[index][0], 'title': STAGED_TOPICS[index][1],
+                            'sourceRevision': args.source, 'edits': 'Source-informed synthetic prompts, answers and outcomes; inline labels disclose selected excerpts/omissions. No live execution.'})
+    entries.append({'id': 'staged-update-example', 'kind': 'staged', 'category': 'Update',
+                    'title': 'Routine Update — condensed illustration', 'sourceRevision': args.source,
+                    'ansi': update_example(staged, work / 'update-example.txt'),
+                    'edits': 'Condensed illustrative fully configured run, not a live recording. Ellipses replace upstream output; backup time, file states and destination are synthetic. Optional tools/preferences determine actual stages.'})
     capture_manifest = None
     if args.captures:
         capture_manifest = json.loads(args.captures.read_text())
@@ -190,6 +244,8 @@ def main():
         (folder / 'text.txt').write_text(header + text)
         presentation = {'label': label, 'source': args.source, 'scenario': entry['title'] + ' (' + entry['id'] + ')',
                         'keepTogether': staged_case_ranges(text) if entry['id'] == 'staged-09' else []}
+        if entry['kind'] == 'actual-vm' and entry.get('commandCaptionReviewed') is True and entry.get('command'):
+            presentation['captionCommand'] = entry['command']
         (folder / 'presentation.json').write_text(json.dumps(presentation, indent=2) + '\n')
         run([str(renderer), str(folder / 'output'), str(folder / 'presentation.json')], input=(header + canonical).encode())
         render_report = json.loads((folder / 'output.json').read_text())
@@ -203,7 +259,7 @@ def main():
         (work / 'capture-input.json').write_text(json.dumps({'captures': [{**e, 'raw': e['id'] + '/raw.ansi'} for e in entries if e['kind'] == 'actual-vm']}, indent=2) + '\n')
     tool_head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     manifest = {'sourceRevision': args.source, 'toolCheckoutHead': tool_head,
-                'toolFiles': {name: digest(work / name) for name in ['run.py', 'render.swift', 'build.py', 'verify.py', 'generation-runtime.json']},
+                'toolFiles': {name: digest(work / name) for name in ['run.py', 'render.swift', 'update-example.txt', 'build.py', 'verify.py', 'generation-runtime.json']},
                 'toolWorktreeDirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True).strip()),
                 'preservedToolingRevision': 'c2f09af4636cc394adfc69666c6749ed5f91b9bf',
                 'rendererPrecedentRevision': '64d48dca63fc8833c366539a487d615dbda45d3f',
@@ -212,7 +268,7 @@ def main():
                     'swift': ['swift', '--version'], 'macOS': ['sw_vers', '-productVersion']}.items()},
                 'scenarios': entries,
                 'coverage': 'Staged current-stack review only unless individual actual-vm entries exist. Presentation checks are not end-to-end evidence.',
-                'regenerate': f'python3 tools/output-gallery/run.py --source {args.source}' + (' --captures /path/to/reviewed/manifest.json' if args.captures else ''),
+                'regenerate': f'python3 tools/output-gallery/run.py --source {args.source}' + (' --captures /path/to/reviewed/manifest.json' if args.captures else '') + (' --readme-example-only' if args.readme_example_only else ''),
                 'capturesManifest': capture_manifest,
                 'vmCoverage': {'directInstallation': 'pending unless an actual-vm entry records it',
                                'quickstartWithoutHomebrew': 'pending unless an actual-vm entry records it',
@@ -224,7 +280,7 @@ def main():
     work.rename(output)
     print('Gallery: ' + str(output))
     print('Grouped index: ' + str(output / 'index.md'))
-    print('Terminal preview: cat ' + str(output / 'staged-02' / 'preview.ansi'))
+    print('Terminal preview: cat ' + str(output / ('staged-update-example' if args.readme_example_only else 'staged-02') / 'preview.ansi'))
     print('All images, matching text and provenance: ' + str(output / 'manifest.json'))
 
 

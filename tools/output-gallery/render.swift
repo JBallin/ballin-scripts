@@ -16,6 +16,7 @@ struct Presentation: Decodable {
     let source: String
     let scenario: String
     let keepTogether: [[Int]]
+    let captionCommand: String?
 }
 var presentation: Presentation?
 var transcriptHeader = ""
@@ -25,7 +26,7 @@ if CommandLine.arguments.count == 3 {
         presentation = try JSONDecoder().decode(Presentation.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[2])))
     } catch { fail("Invalid presentation metadata") }
     let context = presentation!
-    for value in [context.label, context.source, context.scenario] {
+    for value in [context.label, context.source, context.scenario] + (context.captionCommand.map { [$0] } ?? []) {
         guard !value.isEmpty, value.count <= 240,
               !value.unicodeScalars.contains(where: { $0.value < 32 || (127...159).contains($0.value) }) else {
             fail("Presentation captions must be short single-line text")
@@ -110,10 +111,13 @@ let captionAttributes: [NSAttributedString.Key: Any] = [
 ]
 func caption(_ page: Int, _ count: Int) -> NSAttributedString {
     guard let context = presentation else { return NSAttributedString(string: "") }
+    if let command = context.captionCommand {
+        return NSAttributedString(string: "$ " + command + (count > 1 ? "\nPage \(page) of \(count)" : ""), attributes: [.font: regular, .foregroundColor: normal])
+    }
     return NSAttributedString(string: context.label + "\nSource: " + context.source
         + "\nScenario: " + context.scenario + "\nPage \(page) of \(count)", attributes: captionAttributes)
 }
-let captionHeight: CGFloat = presentation == nil ? 0 : ceil(caption(1, 1).boundingRect(
+let captionHeight: CGFloat = presentation == nil ? 0 : ceil(caption(1, 2).boundingRect(
     with: NSSize(width: contentWidth, height: 100000), options: options).height) + 24
 let contentLimit = 1400 - captionHeight
 guard contentLimit > 0 else { fail("Presentation caption is too tall") }

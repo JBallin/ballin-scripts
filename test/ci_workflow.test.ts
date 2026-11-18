@@ -85,10 +85,11 @@ describe('native macOS CI contract', () => {
     assert.notInclude(report, 'sudo');
   });
 
-  it('runs the focused suites serially without accepting pending or empty runs', () => {
-    assert.equal(job.steps.length, 5);
+  it('runs the focused native and synthetic gallery suites without accepting pending or empty runs', () => {
+    assert.equal(job.steps.length, 6);
     assert.equal(job.steps[4].run, 'npm run test:unit -- --no-parallel --forbid-pending --fail-zero '
       + 'test/nvm.test.ts test/onboarding_plutil.test.ts test/prompt_input.test.ts');
+    assert.equal(job.steps[5].run, 'python3 tools/output-gallery/test_gallery.py');
     for (const step of job.steps) {
       assert.notProperty(step, 'if');
       assert.notProperty(step, 'continue-on-error');

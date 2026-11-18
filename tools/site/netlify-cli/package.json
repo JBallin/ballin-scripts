@@ -1,0 +1,7 @@
+{
+  "name": "ballin-site-deploy",
+  "private": true,
+  "dependencies": {
+    "netlify-cli": "27.16.2"
+  }
+}

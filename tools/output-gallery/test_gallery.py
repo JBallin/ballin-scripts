@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 TOOLS = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('gallery', TOOLS / 'run.py')
@@ -59,6 +60,23 @@ class GalleryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(prefix.with_suffix('.json').read_text())['text'], header + 'large case\n' * 100)
 
+    def test_actual_command_caption_preserves_output_and_pagination(self):
+        header = 'ACTUAL VM CAPTURE\nSource: ' + 'a' * 40 + '\n\n'
+        text = header + 'retained output\n' * 90
+        context = dict(label='ACTUAL VM CAPTURE', source='a' * 40,
+                       scenario='Read preferences', keepTogether=[], captionCommand='ballin backup read ballin_config')
+        result, prefix = self.render(text, 'command-caption', context)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(prefix.with_suffix('.json').read_text())
+        self.assertEqual(report['text'], text)
+        self.assertGreater(len(report['pages']), 1)
+        for index, caption in enumerate(report['pageCaptions'], 1):
+            self.assertIn('$ ballin backup read ballin_config', caption)
+            self.assertIn(f'Page {index} of ', caption)
+            self.assertNotIn('Source:', caption)
+        result, _ = self.render(text, 'unsafe-caption', {**context, 'captionCommand': 'ballin\nforged'})
+        self.assertNotEqual(result.returncode, 0)
+
     def test_staged_notes_and_transition_cases_form_complete_blocks(self):
         text = '[STAGED alternative — NVM failed]\n\n[STAGED omission: upstream output]\n\nFailure\n\n' \
             '[STAGED alternative — transition scope]\n\n[STAGED major release]\nProposal\nConsent\nResult\n'
@@ -95,6 +113,64 @@ class GalleryTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 gallery.plain_text('safe' + control)
 
+    def test_canonical_update_example_is_static_and_matches_rendered_text(self):
+        staged = self.root / 'update-example-runtime'
+        staged.mkdir()
+        (staged / 'terminalStyle.ts').write_bytes((TOOLS.parents[1] / 'commands/terminalStyle.ts').read_bytes())
+        source = staged / 'source-evidence/commands/update.ts'
+        source.parent.mkdir(parents=True)
+        source.write_bytes((TOOLS.parents[1] / 'commands/update.ts').read_bytes())
+        sample = TOOLS / 'update-example.txt'
+        ansi = gallery.update_example(staged, sample)
+        self.assertEqual(gallery.plain_text(ansi), sample.read_text())
+        self.assertTrue(ansi.startswith('\x1b[1m$ ballin update'))
+        self.assertIn('\x1b[0;32m✓\x1b[0m ballin_config', ansi)
+        self.assertIn('~ \x1b[1mzshrc\x1b[0m', ansi)
+        header = 'STAGED — source-informed synthetic output; no live execution.\nSource: ' + 'a' * 40 + '\n\n'
+        result, prefix = self.render(header + ansi, 'canonical-update',
+                                     {'label': 'STAGED — source-informed synthetic output; no live execution.', 'source': 'a' * 40,
+                                      'scenario': 'Routine Update — condensed illustration', 'keepTogether': []})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(prefix.with_suffix('.json').read_text())
+        self.assertEqual(report['text'], header + sample.read_text())
+        self.assertEqual(len(report['pages']), 1)
+        self.assertIn('STAGED', report['pageCaptions'][0])
+        # An altered candidate formatter must never execute, even when the
+        # caller supplies source data that otherwise passes the phase checks.
+        marker = staged / 'must-not-exist'
+        runtime = staged / 'terminalStyle.ts'
+        runtime.write_text(runtime.read_text() + '\nrequire("node:fs").writeFileSync(' + json.dumps(str(marker)) + ', "bad");\n')
+        with self.assertRaisesRegex(ValueError, 'Unreviewed gallery runtime'):
+            gallery.update_example(staged, sample)
+        self.assertFalse(marker.exists())
+
+    def test_update_example_accepts_reviewed_history_but_not_unknown_bytes(self):
+        staged = self.root / 'historical-runtime'
+        staged.mkdir()
+        runtime = staged / 'terminalStyle.ts'
+        runtime.write_bytes((TOOLS.parents[1] / 'commands/terminalStyle.ts').read_bytes())
+        source = staged / 'source-evidence/commands/update.ts'
+        source.parent.mkdir(parents=True)
+        source.write_bytes((TOOLS.parents[1] / 'commands/update.ts').read_bytes())
+        pins = self.root / 'historical-pins'
+        pins.mkdir()
+        trusted = {'executableHashes': {'terminalStyle.ts': '0' * 64},
+                   'reviewedProfiles': [{'executableHashes': {'terminalStyle.ts': gallery.digest(runtime)}}]}
+        (pins / 'generation-runtime.json').write_text(json.dumps(trusted))
+        sample = TOOLS / 'update-example.txt'
+        with patch.object(gallery, 'LEGACY', pins):
+            self.assertEqual(gallery.plain_text(gallery.update_example(staged, sample)), sample.read_text())
+            runtime.write_text(runtime.read_text() + '\n// unknown candidate bytes\n')
+            with patch.object(gallery.subprocess, 'check_output') as execute:
+                with self.assertRaisesRegex(ValueError, 'Unreviewed gallery runtime'):
+                    gallery.update_example(staged, sample)
+                execute.assert_not_called()
+            # Candidate-provided metadata must not grant trust.
+            (staged / 'trusted-runtime.json').write_text(json.dumps({
+                'executableHashes': {'terminalStyle.ts': gallery.digest(runtime)}}))
+            with self.assertRaisesRegex(ValueError, 'Unreviewed gallery runtime'):
+                gallery.update_example(staged, sample)
+
     def test_refuses_moving_source_without_creating_output(self):
         output = self.root / 'must-not-exist'
         result = subprocess.run(['python3', str(TOOLS / 'run.py'), '--source', 'HEAD', '--output', str(output)], capture_output=True, timeout=15)
@@ -123,15 +199,21 @@ class GalleryTests(unittest.TestCase):
 
 
 class GalleryBuildTests(unittest.TestCase):
+    def run_checked(self, command):
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0,
+                         f'{command!r}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}')
+        return result
+
     def test_current_setup_copy_and_preserved_historical_replay(self):
         legacy = TOOLS.parent / 'pr-662-output-gallery'
         source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=TOOLS, text=True).strip()
         with tempfile.TemporaryDirectory(prefix='ballin-gallery-source-test-') as temp:
             current = Path(temp) / 'current'
-            subprocess.run(['python3', str(legacy / 'build.py'), '--candidate', source,
-                            '--output', str(current)], check=True, capture_output=True, timeout=30)
+            self.run_checked(['python3', str(legacy / 'build.py'), '--candidate', source,
+                              '--output', str(current)])
             shutil.copy2(legacy / 'verify.py', current)
-            subprocess.run(['python3', str(current / 'verify.py')], check=True, capture_output=True, timeout=30)
+            self.run_checked(['python3', str(current / 'verify.py')])
             text = (current / 'plain.txt').read_text()
             self.assertIn('Enable Ballin tab completion in ~/.bash_profile? [y/N] Yes', text)
             self.assertIn('Enable Ballin tab completion in ~/.bash_profile? [y/N] No', text)
@@ -144,7 +226,7 @@ class GalleryBuildTests(unittest.TestCase):
             self.assertIn("phase 'Initial configuration'", [a['anchor'] for a in anchors])
             historical = Path(temp) / 'historical'
             shutil.copytree(legacy, historical)
-            subprocess.run(['python3', str(historical / 'verify.py')], check=True, capture_output=True, timeout=30)
+            self.run_checked(['python3', str(historical / 'verify.py')])
             self.assertIn('Change preferences later with', (historical / 'plain.txt').read_text())
 
 

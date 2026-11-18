@@ -1,0 +1,6 @@
+{
+  "name": "ballin-documentation-site",
+  "private": true,
+  "scripts": { "test": "python3 ../tools/site/test_site.py" },
+  "dependencies": { "markdown-it": "15.0.3" }
+}
