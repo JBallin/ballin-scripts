@@ -317,7 +317,7 @@ case "$name" in
       esac
     done
     case "$url" in
-      https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh) cp "$FAKE_ROOT/nvm-install.sh" "$target" ;;
+      https://raw.githubusercontent.com/nvm-sh/nvm/v0.41.0/install.sh) cp "$FAKE_ROOT/nvm-install.sh" "$target" ;;
       https://api.github.com/repos/cli/cli/releases/latest) cp "$FAKE_ROOT/gh-release.json" "$target" ;;
       https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_checksums.txt) cp "$FAKE_ROOT/gh-checksums.txt" "$target" ;;
       https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_macOS_arm64.zip|https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_macOS_amd64.zip)
@@ -426,9 +426,12 @@ esac
       assert.notInclude(result.stdout, '  - Install NVM using');
       assert.include(result.stdout, '✓ NVM ready; Node.js active for this setup.');
       assert.notInclude(result.stdout, '$ nvm install --lts\n$ nvm');
-      assert.equal((result.stdout.match(route === 'homebrew' ? /^\$ brew install --formula nvm$/gmu : /^Installing NVM v0\.40\.8 in ~\/\.nvm\.\.\.$/gmu) ?? []).length, 1);
+      assert.equal((result.stdout.match(route === 'homebrew' ? /^\$ brew install --formula nvm$/gmu : /^Installing NVM v0\.41\.0 in ~\/\.nvm\.\.\.$/gmu) ?? []).length, 1);
       if (prefix) { assert.include(profile, prefix + '/opt/nvm/libexec/nvm.sh'); assert.include(profile, prefix + '/opt/nvm/etc/bash_completion.d/nvm'); }
-      else assert.include(readLog(), '/nvm-sh/nvm/v0.40.8/install.sh');
+      else {
+        assert.include(readLog(), '/nvm-sh/nvm/v0.41.0/install.sh');
+        assert.include(result.stdout, 'Installing NVM v0.41.0 in ~/.nvm...');
+      }
     });
   }
   for (const status of [0, 42, 130, 143]) {
@@ -932,7 +935,7 @@ exec /bin/mkdir "$@"
       fs.appendFileSync(path.join(root, 'nvm-install.sh'), `printf 'upstream reload instructions\\n'\nprintf 'upstream diagnostics\\n' >&2\nexit ${installerStatus}\n`);
       const result = run('y\ny\ny\n', { FAKE_MISSING_NODE: '1', FAKE_EARLY_ANSWER: 'n\n' });
       assert.equal(result.status, installerStatus, result.stdout + result.stderr);
-      assert.include(result.stdout, 'Installing NVM v0.40.8 in ~/.nvm...');
+      assert.include(result.stdout, 'Installing NVM v0.41.0 in ~/.nvm...');
       assert.notInclude(result.stdout, 'PROFILE=/dev/null');
       assert.notInclude(result.stdout, 'nvm-install.sh');
       if (installerStatus === 0) {

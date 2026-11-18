@@ -1235,13 +1235,14 @@ install_nvm_lts() {
       [[ -r "$nvm_source" ]] || fail 'Homebrew NVM source was not installed at its stable prefix.'
     else
       prepare_nvm_directory
-      download 'https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh' "$scratch/nvm-install.sh"
+      local nvm_installer_version='v0.41.0'
+      download "https://raw.githubusercontent.com/nvm-sh/nvm/$nvm_installer_version/install.sh" "$scratch/nvm-install.sh"
       if [[ ! -s "$scratch/nvm-install.sh" ]] || ! /bin/bash -n "$scratch/nvm-install.sh"; then
         fail 'The official NVM installer is empty or incomplete.'
       fi
       validate_nvm_directory
       validate_nvm_alias_targets
-      printf 'Installing NVM v0.40.8 in %s...\n' "$(display_path "$nvm_directory")"
+      printf 'Installing NVM %s in %s...\n' "$nvm_installer_version" "$(display_path "$nvm_directory")"
       local installer_status=0
       # NVM installer overrides must not redirect the promised source or install
       # an inherited NODE_VERSION. Keep unrelated caller/auth environment intact.
