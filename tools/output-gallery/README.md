@@ -24,10 +24,15 @@ cat .output-gallery/review-1/index.md
 ```
 
 Confirm the resolved SHA is exactly the selected SHA. Review the generated index,
-PNGs, matching text and provenance using an authorized viewer. Identify whether
-the source is a candidate, an explicit-SHA run or a published stable release;
-these are different claims. Initial real stable-install captures follow approved
-release publication, not an unpublished version URL.
+PNGs, matching text and provenance using an authorized viewer. Label each example
+as staged, an actual explicit-SHA candidate run or a published stable-release
+capture; these are different claims. Real stable-install captures use the
+published stable commands only after approved release publication. An explicit-SHA
+candidate run or an unpublished version URL does not establish stable selection.
+
+Refresh relevant examples when the shown command or output materially changes.
+Reuse unaffected examples with their original source revisions and provenance;
+a documentation-only change or a new release alone does not require recapture.
 
 Existing output is refused to preserve evidence. `.output-gallery/` stays ignored;
 never use a raw-input path as output. A failed attempt retains `.gallery-build-*`
