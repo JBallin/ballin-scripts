@@ -159,22 +159,32 @@ describe('analytics D1 report', () => {
     assert.include(output, 'observed opt-in, best-effort public telemetry is incomplete');
     assert.include(output, 'Counts do not establish root causes, population adoption or failure rates.');
     assert.include(output, 'do not sum as unique backups');
-    assert.include(output, 'legacy_uncategorized: older outcomes without categories; unknown: new outcomes without reliable single-family evidence.');
+    assert.include(output, 'unknown: failures without reliable single-family evidence.');
     assert.include(output, 'Guide: docs/analytics-backend.md');
   });
 
   it('retains every failure category and both coverage measures in the compact view', () => {
-    const categories = ['transport', 'authentication', 'reconciliation', 'local_state', 'unknown', 'legacy_uncategorized'];
+    const categories = ['transport', 'authentication', 'reconciliation', 'local_state', 'unknown'];
     const output = renderReport({
-      activeInstalls: [], behaviorOutcomes: [], commandStatus: [], runtimeTrends: [],
-      backupFailures: categories.map((category, index) => ({ category, failures: index + 1 })),
+      activeInstalls: [], behaviorOutcomes: [{ event: 'backup.run', failures: 15 }], commandStatus: [], runtimeTrends: [],
+      backupFailures: categories.map((category, index) => ({ category, failures: index + 1, total_failures: 15 })),
     }, { database: defaultDatabase, from: '2026-06-01', to: '2026-06-01' });
     const categorySection = output.split('Backup failure categories (backup.run only)\n')[1]
       .split('\nRuntime/version trends')[0];
     categories.forEach((category, index) => {
       assert.match(categorySection, new RegExp(`^${category}\\s+${index + 1}$`, 'mu'));
     });
-    assert.include(categorySection, 'Category-schema coverage: 15/21 (71.4%); identified-family coverage: 10/21 (47.6%).');
+    assert.include(categorySection, 'Category-schema coverage: 15/15 (100.0%); identified-family coverage: 10/15 (66.7%).');
+    assert.notInclude(categorySection, 'Warning:');
+    assert.notInclude(categorySection, 'legacy_uncategorized');
+  });
+
+  it('warns when category counts exceed observed backup failures', () => {
+    const output = renderReport({
+      activeInstalls: [], behaviorOutcomes: [{ event: 'backup.run', failures: 1 }],
+      commandStatus: [], runtimeTrends: [], backupFailures: [{ category: 'unknown', failures: 2, total_failures: 1 }],
+    }, { database: defaultDatabase, from: '2026-06-01', to: '2026-06-01' });
+    assert.include(output, 'backup failure total (1) and category total (2) differ');
   });
 
   it('normalizes malformed aggregate values without misreporting failures', () => {
@@ -250,17 +260,44 @@ describe('analytics D1 report', () => {
       const options = { database: defaultDatabase, from: '2026-06-01', to: '2026-06-02' };
       const rows = database.prepare(loadReportQueries(options).backupFailures).all();
       assert.deepEqual(rows, [
-        { category: 'authentication', failures: 1 }, { category: 'legacy_uncategorized', failures: 4 },
-        { category: 'transport', failures: 3 }, { category: 'unknown', failures: 2 },
+        { category: 'authentication', failures: 1, total_failures: 10 },
+        { category: 'transport', failures: 3, total_failures: 10 }, { category: 'unknown', failures: 2, total_failures: 10 },
       ]);
       const report = generateReport(options, (sql: string) => database.prepare(sql).all());
       assert.include(report, 'Category-schema coverage: 6/10 (60.0%); identified-family coverage: 4/10 (40.0%).');
-      assert.include(report, 'unknown: new outcomes without reliable single-family evidence');
+      assert.include(report, 'unknown: failures without reliable single-family evidence');
+      assert.notInclude(report, 'legacy_uncategorized');
+      assert.include(report, 'backup failure total (10) and category total (6) differ');
       const legacyOptions = { ...options, from: '2026-07-01', to: '2026-07-02' };
-      assert.deepEqual(database.prepare(loadReportQueries(legacyOptions).backupFailures).all(), []);
+      assert.deepEqual(database.prepare(loadReportQueries(legacyOptions).backupFailures).all(), [{ category: null, failures: 0, total_failures: 0 }]);
       database.exec("INSERT INTO behavior_events_daily VALUES ('2026-07-01', 'backup.run', 'failure', 5)");
       const legacyReport = generateReport(legacyOptions, (sql: string) => database.prepare(sql).all());
+      assert.include(legacyReport, 'No category data found for these backup failures.');
+      assert.include(legacyReport, 'backup failure total (5) and category total (0) differ');
       assert.include(legacyReport, 'Category-schema coverage: 0/5 (0.0%); identified-family coverage: 0/5 (0.0%).');
+    } finally { database.close(); }
+  });
+
+  it('keeps category coverage coherent when ingestion occurs between report queries', () => {
+    const database = new DatabaseSync(':memory:');
+    try {
+      for (const filename of fs.readdirSync(path.join(__dirname, '..', 'analytics-worker', 'migrations')).sort()) {
+        database.exec(fs.readFileSync(path.join(__dirname, '..', 'analytics-worker', 'migrations', filename), 'utf8'));
+      }
+      database.exec(`INSERT INTO behavior_events_daily VALUES ('2026-06-01', 'backup.run', 'failure', 1);
+        INSERT INTO backup_failures_daily VALUES ('2026-06-01', 'transport', 1);`);
+      const options = { database: defaultDatabase, from: '2026-06-01', to: '2026-06-01' };
+      const queries = loadReportQueries(options);
+      const report = generateReport(options, (sql: string) => {
+        const rows = database.prepare(sql).all();
+        if (sql === queries.behaviorOutcomes) {
+          database.exec(`BEGIN; UPDATE behavior_events_daily SET count = 2;
+            UPDATE backup_failures_daily SET count = 2; COMMIT;`);
+        }
+        return rows;
+      });
+      assert.include(report, 'Category-schema coverage: 2/2 (100.0%); identified-family coverage: 2/2 (100.0%).');
+      assert.notInclude(report, 'Warning:');
     } finally { database.close(); }
   });
 

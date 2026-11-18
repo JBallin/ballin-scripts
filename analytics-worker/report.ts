@@ -387,19 +387,20 @@ const formatBehaviorOutcomes = (rows: D1Row[]): string => {
   ].join('\n');
 };
 
-const formatBackupFailures = (rows: D1Row[]): string => {
-  const total = rows.reduce((sum, row) => sum + numberValue(row.failures), 0);
-  const known = rows.filter((row) => row.category !== 'unknown' && row.category !== 'legacy_uncategorized')
-    .reduce((sum, row) => sum + numberValue(row.failures), 0);
-  const versioned = rows.filter((row) => row.category !== 'legacy_uncategorized')
+const formatBackupFailures = (aggregateRows: D1Row[]): string => {
+  const total = numberValue(aggregateRows[0]?.total_failures);
+  const rows = aggregateRows.filter((row) => row.category != null);
+  const categorized = rows.reduce((sum, row) => sum + numberValue(row.failures), 0);
+  const known = rows.filter((row) => row.category !== 'unknown')
     .reduce((sum, row) => sum + numberValue(row.failures), 0);
   const percentage = (count: number): string => total === 0 ? '0.0%' : `${(100 * count / total).toFixed(1)}%`;
   return [
     'Backup failure categories (backup.run only)',
     rows.length ? table(['category', 'failures'], rows.map((row) => [stringValue(row.category), String(numberValue(row.failures))]))
-      : 'No backup failures found for this range.',
-    `Category-schema coverage: ${versioned}/${total} (${percentage(versioned)}); identified-family coverage: ${known}/${total} (${percentage(known)}).`,
-    'legacy_uncategorized: older outcomes without categories; unknown: new outcomes without reliable single-family evidence.',
+      : total ? 'No category data found for these backup failures.' : 'No backup failures found for this range.',
+    `Category-schema coverage: ${categorized}/${total} (${percentage(categorized)}); identified-family coverage: ${known}/${total} (${percentage(known)}).`,
+    ...(total !== categorized ? [`Warning: backup failure total (${total}) and category total (${categorized}) differ; category data is incomplete or inconsistent.`] : []),
+    'unknown: failures without reliable single-family evidence.',
   ].join('\n');
 };
 

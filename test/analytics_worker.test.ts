@@ -134,7 +134,7 @@ const payloadForCommand = (command: string) => ({
   osVersion: '26.6',
 });
 
-const payloadForBehavior = (event = 'backup.run', status = 'success') => ({
+const payloadForBehavior = (event = 'update.backup', status = 'success') => ({
   schemaVersion: 2,
   installId: '826f9faa-9995-4f66-a01b-73b4f7aebdf1',
   dateBucket: new Date().toISOString().slice(0, 10),
@@ -317,7 +317,7 @@ describe('analytics Worker', () => {
   it('stores every behavioral event and terminal outcome only in its identity-free aggregate', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
 
-    for (const event of ['backup.run', 'update.backup', 'update.self-update']) {
+    for (const event of ['update.backup', 'update.self-update']) {
       for (const status of ['success', 'failure']) {
         const { env, rateLimitKeys, runs } = makeEnv();
         const payload = payloadForBehavior(event, status);
@@ -335,6 +335,17 @@ describe('analytics Worker', () => {
         assert.match(rateLimitKeys[2], /^v1-events:install:[0-9a-f]{64}$/);
         assert.notInclude(JSON.stringify(runs), rateLimitKeys[2].split(':')[2]);
       }
+    }
+  });
+
+  it('rejects v2 backup outcomes before storage while preserving v2 update events', async () => {
+    const worker = require('../analytics-worker/src/index.ts').default;
+    for (const status of ['success', 'failure']) {
+      const { env, runs } = makeEnv();
+      const response = await worker.fetch(eventRequest(payloadForBehavior('backup.run', status)), env);
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: 'backup.run requires schemaVersion 3' });
+      assert.deepEqual(runs, []);
     }
   });
 
@@ -387,7 +398,7 @@ describe('analytics Worker', () => {
       applyRuns(runs.splice(0));
       const beforeRows = existingRows();
 
-      for (const event of ['backup.run', 'update.backup', 'update.self-update']) {
+      for (const event of ['update.backup', 'update.self-update']) {
         for (const status of ['success', 'failure', 'success']) {
           assert.equal((await worker.fetch(eventRequest(payloadForBehavior(event, status)), env)).status, 204);
         }
@@ -396,8 +407,6 @@ describe('analytics Worker', () => {
 
       assert.deepEqual(existingRows(), beforeRows);
       assert.deepEqual(database.prepare('SELECT event, status, count FROM behavior_events_daily ORDER BY event, status').all(), [
-        { event: 'backup.run', status: 'failure', count: 1 },
-        { event: 'backup.run', status: 'success', count: 2 },
         { event: 'update.backup', status: 'failure', count: 1 },
         { event: 'update.backup', status: 'success', count: 2 },
         { event: 'update.self-update', status: 'failure', count: 1 },
@@ -412,7 +421,7 @@ describe('analytics Worker', () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     for (const failureCategory of ['transport', 'authentication', 'reconciliation', 'local_state', 'unknown']) {
       const { env, runs, rateLimitKeys } = makeEnv();
-      assert.equal((await worker.fetch(eventRequest({ ...payloadForBehavior(), schemaVersion: 3, status: 'failure', failureCategory }), env)).status, 204);
+      assert.equal((await worker.fetch(eventRequest({ ...payloadForBehavior('backup.run'), schemaVersion: 3, status: 'failure', failureCategory }), env)).status, 204);
       assert.lengthOf(runs, 2);
       assert.deepEqual(runs[0].values, [payloadForBehavior().dateBucket, 'backup.run', 'failure']);
       assert.deepEqual(runs[1].values, [payloadForBehavior().dateBucket, failureCategory]);
@@ -420,9 +429,9 @@ describe('analytics Worker', () => {
       assert.notInclude(JSON.stringify(runs), 'install_id');
     }
     const { env, runs } = makeEnv();
-    assert.equal((await worker.fetch(eventRequest({ ...payloadForBehavior(), schemaVersion: 3 }), env)).status, 204);
+    assert.equal((await worker.fetch(eventRequest({ ...payloadForBehavior('backup.run'), schemaVersion: 3 }), env)).status, 204);
     assert.lengthOf(runs, 1);
-    const valid = { ...payloadForBehavior(), schemaVersion: 3, status: 'failure', failureCategory: 'unknown' };
+    const valid = { ...payloadForBehavior('backup.run'), schemaVersion: 3, status: 'failure', failureCategory: 'unknown' };
     const missing = { ...valid } as Record<string, unknown>; delete missing.failureCategory;
     const invalid: Record<string, unknown>[] = [missing,
       ...[null, '', {}, [], true, 'unclassified', 'TRANSPORT', 'DUMMY_PRIVATE_ERROR'].map((failureCategory) => ({ ...valid, failureCategory })),
@@ -438,7 +447,7 @@ describe('analytics Worker', () => {
     }
   });
 
-  it('counts each v3 failure once with its category atomically, retaining legacy failures and parent separation', async () => {
+  it('counts each v3 failure once with its category atomically, preserving parent separation', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
     const database = new DatabaseSync(':memory:');
     const migrations = path.join(__dirname, '..', 'analytics-worker', 'migrations');
@@ -459,22 +468,22 @@ describe('analytics Worker', () => {
     };
     try {
       for (const filename of fs.readdirSync(migrations).sort()) database.exec(fs.readFileSync(path.join(migrations, filename), 'utf8'));
-      for (const payload of [payloadForBehavior('backup.run', 'failure'), payloadForBehavior('update.backup', 'failure'),
-        { ...payloadForBehavior(), schemaVersion: 3 },
-        ...['transport', 'unknown'].map((failureCategory) => ({ ...payloadForBehavior(), schemaVersion: 3, status: 'failure', failureCategory })),
+      for (const payload of [payloadForBehavior('update.backup', 'failure'),
+        { ...payloadForBehavior('backup.run'), schemaVersion: 3 },
+        ...['transport', 'unknown'].map((failureCategory) => ({ ...payloadForBehavior('backup.run'), schemaVersion: 3, status: 'failure', failureCategory })),
       ]) assert.equal((await worker.fetch(eventRequest(payload), env)).status, 204);
-      assert.equal(batches, 5);
+      assert.equal(batches, 4);
       assert.deepEqual(database.prepare('SELECT event, status, count FROM behavior_events_daily ORDER BY event, status').all(), [
-        { event: 'backup.run', status: 'failure', count: 3 }, { event: 'backup.run', status: 'success', count: 1 },
+        { event: 'backup.run', status: 'failure', count: 2 }, { event: 'backup.run', status: 'success', count: 1 },
         { event: 'update.backup', status: 'failure', count: 1 },
       ]);
       const categoryRows = [{ category: 'transport', count: 1 }, { category: 'unknown', count: 1 }];
       assert.deepEqual(database.prepare('SELECT category, count FROM backup_failures_daily ORDER BY category').all(), categoryRows);
       failCategory = true;
-      await worker.fetch(eventRequest({ ...payloadForBehavior(), schemaVersion: 3, status: 'failure', failureCategory: 'authentication' }), env).then(
+      await worker.fetch(eventRequest({ ...payloadForBehavior('backup.run'), schemaVersion: 3, status: 'failure', failureCategory: 'authentication' }), env).then(
         () => assert.fail('storage failure must not be accepted'), (error: Error) => assert.equal(error.message, 'fixture category write failure'),
       );
-      assert.equal(database.prepare("SELECT count FROM behavior_events_daily WHERE event = 'backup.run' AND status = 'failure'").get().count, 3);
+      assert.equal(database.prepare("SELECT count FROM behavior_events_daily WHERE event = 'backup.run' AND status = 'failure'").get().count, 2);
       assert.deepEqual(database.prepare('SELECT category, count FROM backup_failures_daily ORDER BY category').all(), categoryRows);
       for (const table of ['install_days', 'command_events_daily', 'version_events_daily']) {
         assert.deepEqual(database.prepare(`SELECT * FROM ${table}`).all(), []);
@@ -879,7 +888,7 @@ describe('analytics Worker', () => {
   it('enforces all three behavioral rate limits before any aggregate write', async () => {
     const worker = require('../analytics-worker/src/index.ts').default;
 
-    for (const payload of [payloadForBehavior(), { ...payloadForBehavior(), schemaVersion: 3 }, payloadForBackupFailure()]) {
+    for (const payload of [payloadForBehavior(), { ...payloadForBehavior('backup.run'), schemaVersion: 3 }, payloadForBackupFailure()]) {
       for (const [prefix, keyCount, readsBody] of [
         ['v1-events:source:', 1, false],
         ['v1-events:global', 2, false],
