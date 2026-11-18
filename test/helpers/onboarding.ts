@@ -177,7 +177,7 @@ const createSandbox = (options: { quickstart?: boolean } = {}): Sandbox => {
         curl: `const fs = require('fs'); const args = process.argv.slice(2);\n`
           + `const publicScripts = new Map(['install.sh', 'quickstart.sh'].map(file => ['https://raw.githubusercontent.com/JBallin/ballin-scripts/main/' + file, file]));\n`
           + `if (args.length === 3 && args[0] === '-q' && args[1] === '-fsSL' && publicScripts.has(args[2])) { fs.writeFileSync(1, fs.readFileSync(${JSON.stringify(source)} + '/' + publicScripts.get(args[2]))); process.exit(0); }\n`
-          + `const url=args.at(-3); const nvm=url==='https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh'; const file=nvm?'nvm-install.sh':url==='https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh'?'install.sh':null; if(!file || JSON.stringify(args.slice(0,-3))!==JSON.stringify(['-q','-fsSL','--proto','=https','--proto-redir','=https','--tlsv1.2'])) process.exit(97);\n`
+          + `const url=args.at(-3); const nvm=url==='https://raw.githubusercontent.com/nvm-sh/nvm/v0.41.0/install.sh'; const file=nvm?'nvm-install.sh':url==='https://raw.githubusercontent.com/JBallin/ballin-scripts/main/install.sh'?'install.sh':null; if(!file || JSON.stringify(args.slice(0,-3))!==JSON.stringify(['-q','-fsSL','--proto','=https','--proto-redir','=https','--tlsv1.2'])) process.exit(97);\n`
           + `const target = args.at(-1); if (!target.startsWith(${JSON.stringify(sandbox.scratch + '/ballin-quickstart.')})) process.exit(97);\n`
           + `fs.copyFileSync((nvm ? ${JSON.stringify(sandbox.root)} : ${JSON.stringify(source)}) + '/' + file, target);`,
       })) {

@@ -312,7 +312,7 @@ case "$name" in
       esac
     done
     case "$url" in
-      https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh) cp "$FAKE_ROOT/nvm-install.sh" "$target" ;;
+      https://raw.githubusercontent.com/nvm-sh/nvm/v0.41.0/install.sh) cp "$FAKE_ROOT/nvm-install.sh" "$target" ;;
       https://api.github.com/repos/cli/cli/releases/latest) cp "$FAKE_ROOT/gh-release.json" "$target" ;;
       https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_checksums.txt) cp "$FAKE_ROOT/gh-checksums.txt" "$target" ;;
       https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_macOS_arm64.zip|https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_macOS_amd64.zip)
@@ -411,7 +411,10 @@ esac
       assert.include(readLog(), 'nvm:install:--lts'); assert.notInclude(readLog(), 'nvm:alias:'); assert.notInclude(readLog(), 'nvm:use:');
       assert.notInclude(readLog(), 'auth login'); assert.notInclude(readLog(), 'nodejs.org');
       if (prefix) { assert.include(profile, prefix + '/opt/nvm/libexec/nvm.sh'); assert.include(profile, prefix + '/opt/nvm/etc/bash_completion.d/nvm'); }
-      else assert.include(readLog(), '/nvm-sh/nvm/v0.40.8/install.sh');
+      else {
+        assert.include(readLog(), '/nvm-sh/nvm/v0.41.0/install.sh');
+        assert.include(result.stdout, '<downloaded official NVM v0.41.0 installer>');
+      }
     });
   }
   it('refuses an NVM default that differs from the active runtime', () => {

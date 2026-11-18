@@ -894,7 +894,7 @@ plan_nvm() {
   if [[ -n "$nvm_problem" ]]; then printf '%s\n' "$nvm_problem"
   elif [[ "$nvm_loadable" != true ]]; then
     if [[ -n "$brew_tool" ]]; then printf '$ brew install --formula nvm\n'
-    else printf '$ PROFILE=/dev/null bash <downloaded official NVM v0.40.8 installer>\n'; fi
+    else printf '$ PROFILE=/dev/null bash <downloaded official NVM v0.41.0 installer>\n'; fi
   fi
   printf '$ nvm install --lts\n'
   if "$nvm_default_exists"; then printf 'The existing NVM default will be changed to follow latest LTS.\n'; printf "$ nvm alias default 'lts/*'\n"; fi
@@ -930,7 +930,7 @@ install_nvm_lts() {
       [[ -r "$nvm_source" ]] || fail 'Homebrew NVM source was not installed at its stable prefix.'
     else
       prepare_nvm_directory
-      download 'https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.8/install.sh' "$scratch/nvm-install.sh"
+      download 'https://raw.githubusercontent.com/nvm-sh/nvm/v0.41.0/install.sh' "$scratch/nvm-install.sh"
       if [[ ! -s "$scratch/nvm-install.sh" ]] || ! /bin/bash -n "$scratch/nvm-install.sh"; then
         fail 'The official NVM installer is empty or incomplete.'
       fi
