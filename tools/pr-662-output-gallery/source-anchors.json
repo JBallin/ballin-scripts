@@ -1,0 +1,327 @@
+[
+  {
+    "file": "quickstart.sh",
+    "line": 996,
+    "anchor": "Ballin requires Node.js. Install it using NVM?"
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 997,
+    "anchor": "Use NVM with Node.js LTS instead?"
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 685,
+    "anchor": "Node.js details"
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 1100,
+    "anchor": "NVM ready; Node.js active for this setup."
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 1102,
+    "anchor": "Homebrew's instructions above are for manual setup."
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 1309,
+    "anchor": "confirm_fixed_choice Skip"
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 1441,
+    "anchor": "if confirm 'Set up backups to GitHub?' y"
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 1542,
+    "anchor": "if ! confirm 'Proceed with installation?'"
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 1237,
+    "anchor": "configure_path"
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 1158,
+    "anchor": "manual_nvm_guidance"
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 392,
+    "anchor": "confirm_first_backup"
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 388,
+    "anchor": "Enter Yes or No."
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 1012,
+    "anchor": "Setting up NVM and Node.js LTS"
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 1021,
+    "anchor": "$ brew install --formula nvm"
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 1074,
+    "anchor": "Node.js LTS installation did not finish. Inspect its output, then rerun Quickstart."
+  },
+  {
+    "file": "quickstart.sh",
+    "line": 1042,
+    "anchor": "NVM installation did not finish. Inspect its output, then rerun Quickstart."
+  },
+  {
+    "file": "commands/backup_preferences.ts",
+    "line": 101,
+    "anchor": "Backups may contain private information or secrets."
+  },
+  {
+    "file": "commands/backup_preferences.ts",
+    "line": 23,
+    "anchor": "Configuration file:"
+  },
+  {
+    "file": "commands/backup_preferences.ts",
+    "line": 26,
+    "anchor": "Check write access to this file and its containing folder"
+  },
+  {
+    "file": "commands/backup_preferences.ts",
+    "line": 24,
+    "anchor": "filesystemCause(error)"
+  },
+  {
+    "file": "commands/backup_setup.ts",
+    "line": 262,
+    "anchor": "colorUrls: Boolean(previous)"
+  },
+  {
+    "file": "commands/backup_setup.ts",
+    "line": 34,
+    "anchor": "Branch protection wasn\u2019t enabled. Backups still work."
+  },
+  {
+    "file": "commands/backup_setup.ts",
+    "line": 27,
+    "anchor": "Reconnect details"
+  },
+  {
+    "file": "commands/backup_setup.ts",
+    "line": 27,
+    "anchor": "Backup details"
+  },
+  {
+    "file": "commands/backup_setup.ts",
+    "line": 75,
+    "anchor": "earlierChoicesSaved ? '; earlier choices saved.'"
+  },
+  {
+    "file": "commands/backup_setup.ts",
+    "line": 203,
+    "anchor": "Enter Create or Reconnect."
+  },
+  {
+    "file": "commands/backup_setup.ts",
+    "line": 66,
+    "anchor": "Change backup settings later with"
+  },
+  {
+    "file": "commands/completion_setup.ts",
+    "line": 177,
+    "anchor": "Startup file:"
+  },
+  {
+    "file": "commands/completion_setup.ts",
+    "line": 179,
+    "anchor": "Enable Ballin tab completion?"
+  },
+  {
+    "file": "commands/completion_setup.ts",
+    "line": 187,
+    "anchor": "Enter Yes or No."
+  },
+  {
+    "file": "config/setup.ts",
+    "line": 73,
+    "anchor": "defaults._setup = { unreviewedNvm: true }"
+  },
+  {
+    "file": "config/.defaultConfig.json",
+    "line": 5,
+    "anchor": "\"backup\": \"false\""
+  },
+  {
+    "file": "config/.defaultConfig.json",
+    "line": 8,
+    "anchor": "\"nvm\": \"false\""
+  },
+  {
+    "file": "config/portable.ts",
+    "line": 60,
+    "anchor": "throw new PortableConfigError('Config is not valid JSON.')"
+  },
+  {
+    "file": "config/diagnostics.ts",
+    "line": 5,
+    "anchor": "const configurationPath"
+  },
+  {
+    "file": "config/diagnostics.ts",
+    "line": 9,
+    "anchor": "const filesystemCause"
+  },
+  {
+    "file": "config/diagnostics.ts",
+    "line": 10,
+    "anchor": "EACCES:"
+  },
+  {
+    "file": "config/diagnostics.ts",
+    "line": 11,
+    "anchor": "ENOSPC: 'no space left on the filesystem'"
+  },
+  {
+    "file": "commands/update.ts",
+    "line": 132,
+    "anchor": "defaultedKeys.map"
+  },
+  {
+    "file": "commands/self_update.ts",
+    "line": 135,
+    "anchor": "const revisionLabel"
+  },
+  {
+    "file": "commands/self_update.ts",
+    "line": 143,
+    "anchor": "Ballin revision identity updated:"
+  },
+  {
+    "file": "commands/self_update.ts",
+    "line": 146,
+    "anchor": "Ballin updated:"
+  },
+  {
+    "file": "scripts/revision-bootstrap.sh",
+    "line": 30,
+    "anchor": "Install supported Node.js or use Quickstart."
+  },
+  {
+    "file": "scripts/revision-bootstrap.sh",
+    "line": 40,
+    "anchor": "Upgrade or activate Node.js and retry."
+  },
+  {
+    "file": "commands/repo_update.ts",
+    "line": 44,
+    "anchor": "Upgrade or activate Node.js, then retry."
+  },
+  {
+    "file": "commands/repo_update.ts",
+    "line": 140,
+    "anchor": "Confirmation required. Run"
+  },
+  {
+    "file": "commands/repo_update.ts",
+    "line": 49,
+    "anchor": "const selectionLabel"
+  },
+  {
+    "file": "commands/repo_update.ts",
+    "line": 58,
+    "anchor": "label: `development ${sha.slice(0, 12)}"
+  },
+  {
+    "file": "commands/repo_update.ts",
+    "line": 53,
+    "anchor": "unknown revision"
+  },
+  {
+    "file": "commands/setup.ts",
+    "line": 103,
+    "anchor": "Configuration file:"
+  },
+  {
+    "file": "commands/setup.ts",
+    "line": 100,
+    "anchor": "replace it with defaults"
+  },
+  {
+    "file": "commands/setup.ts",
+    "line": 32,
+    "anchor": "Update Node.js LTS through NVM?"
+  },
+  {
+    "file": "commands/setup.ts",
+    "line": 15,
+    "anchor": "Node.js LTS updates through NVM are offered when NVM is loadable"
+  },
+  {
+    "file": "commands/setup.ts",
+    "line": 58,
+    "anchor": "Review cancelled."
+  },
+  {
+    "file": "commands/setup.ts",
+    "line": 58,
+    "anchor": "Earlier choices saved."
+  },
+  {
+    "file": "commands/setup.ts",
+    "line": 29,
+    "anchor": "Update Ballin?"
+  },
+  {
+    "file": "commands/setup.ts",
+    "line": 30,
+    "anchor": "Clean up Homebrew?"
+  },
+  {
+    "file": "commands/install_setup.ts",
+    "line": 222,
+    "anchor": "offerCompletionSetup(docsUrl"
+  },
+  {
+    "file": "commands/install_setup.ts",
+    "line": 235,
+    "anchor": "process.env.BALLIN_BACKUP_CHOICE !== 'no'"
+  },
+  {
+    "file": "commands/install_setup.ts",
+    "line": 250,
+    "anchor": "Review your Ballin preferences?"
+  },
+  {
+    "file": "commands/install_setup.ts",
+    "line": 258,
+    "anchor": "setupAnalytics(repoDir)"
+  },
+  {
+    "file": "commands/install_setup.ts",
+    "line": 239,
+    "anchor": "deferFollowUp: true"
+  },
+  {
+    "file": "commands/install_setup.ts",
+    "line": 265,
+    "anchor": "const followUp = generalReview ? [general, backup]"
+  },
+  {
+    "file": "commands/install_setup.ts",
+    "line": 261,
+    "anchor": "Change preferences later with"
+  },
+  {
+    "file": "install.sh",
+    "line": 592,
+    "anchor": "setup_complete; printf '\\nOpen a new Terminal and run '"
+  }
+]
