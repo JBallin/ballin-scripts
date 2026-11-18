@@ -1,5 +1,5 @@
 {
-  "collectionPolicy": 1,
+  "collectionPolicy": 2,
   "roots": {
     "editor": [
       "Library",
