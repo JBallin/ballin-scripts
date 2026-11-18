@@ -90,7 +90,7 @@ Commands:
     read                  print a snapshot or inspect files in a bundle
     disconnect            disconnect this Mac and disable automatic backups
 
-Repository backups include only locally approved sensitive sources; review them with \`ballin setup\`. Run \`ballin help backup <subcommand>\` for subcommand-specific help.
+Repository backups include only locally approved sensitive sources; review them with \`ballin backup setup\`. Run \`ballin help backup <subcommand>\` for subcommand-specific help.
 `;
 
 const backupSubcommandHelp: Record<BackupCommandName, string> = {
@@ -101,9 +101,9 @@ Create, reconnect to, or validate a private GitHub backup repository.
 Options:
     --hostname <host>  skip the new-setup host question (default: github.com)
 
-New setup: Choose Create or Reconnect. Omit the repository name to choose it during setup. Choose whether to include sensitive sources, confirm the destination, then choose whether updates should run backups automatically.
+New setup: Choose Create or Reconnect. Omit the repository name to choose it during setup. Choose whether to include sensitive sources, then confirm the destination. Use \`ballin setup\` to review automatic backup and other update preferences.
 
-Existing backup: Validate the saved repository and review backup preferences. The saved host is retained; disconnect before choosing a different destination.
+Existing backup: Validate the saved repository and review sensitive-source inclusion. The saved host is retained; disconnect before choosing a different destination.
 
 Authenticate gh for the selected host before setup. Backups belong to your individual account on that host. Use a hostname, not a URL. Review local Ballin preferences with \`ballin setup\`.
 
@@ -279,11 +279,11 @@ function runBallinCommand(args = process.argv.slice(2)): void {
       return;
     case 'backup': {
       if (isCommandHelp(args)) {
-        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin setup', 'ballin help backup <subcommand>']));
+        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin backup setup', 'ballin help backup <subcommand>']));
         return;
       }
       if (commandArgs.length === 1 && commandArgs[0] === 'help') {
-        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin setup', 'ballin help backup <subcommand>']));
+        writeStdout(terminalCommandReferences(formatHelp(backupHelp), ['ballin backup setup', 'ballin help backup <subcommand>']));
         return;
       }
       const helpCommand = backupHelpCommand(args);

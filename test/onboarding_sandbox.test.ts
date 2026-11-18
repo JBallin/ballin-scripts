@@ -25,14 +25,130 @@ describe('onboarding sandbox', function() {
 
   const { scenarios, activeScenario, selectScenario, scenarioPath } = require('./helpers/sandbox_scenarios.ts');
   const installBackup = () => {
-    const result = runSandbox(sandbox, ['install'], 'y\nn\ny\n\ncreate\n\ny\ny\ny\n');
+    const result = runSandbox(sandbox, ['install'], 'y\ny\n\ncreate\n\ny\ny\ny\n\n\n\n\ny\nn\n');
     assert.equal(result.status, 0, result.stdout + result.stderr);
   };
+  it('keeps controlled NVM independent of host toolcache permissions', () => {
+    cleanupSandbox(sandbox.root); sandbox = createSandbox({ quickstart: true });
+    const toolcache = path.join(sandbox.root, 'host-toolcache'); fs.mkdirSync(toolcache, { mode: 0o777 }); fs.chmodSync(toolcache, 0o777);
+    const hostNode = path.join(toolcache, 'node'); fs.copyFileSync(process.execPath, hostNode);
+    const directory = path.join(sandbox.home, '.config/nvm');
+    const source = path.join(sandbox.root, 'nvm-fixture.sh');
+    const result = spawnSync('/bin/bash', ['--noprofile', '--norc', '-c', '. "$1"; nvm install --lts', 'fixture', source], {
+      env: { ...sandboxEnvironment(sandbox), NVM_DIR: directory, BALLIN_QA_NODE: hostNode }, encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const installed = path.join(directory, `versions/node/${process.version}/bin/node`);
+    assert.isFalse(fs.lstatSync(installed).isSymbolicLink());
+    assert.equal(fs.readFileSync(path.join(directory, 'alias/lts/*'), 'utf8').trim(), process.version);
+    const resolved = spawnSync('/bin/bash', ['--noprofile', '--norc', '-c', '. "$1"; nvm version default; node --version', 'fixture', source], {
+      env: { ...sandboxEnvironment(sandbox), NVM_DIR: directory, PATH: `${path.dirname(installed)}:${sandboxEnvironment(sandbox).PATH}` }, encoding: 'utf8',
+    });
+    assert.equal(resolved.status, 0, resolved.stdout + resolved.stderr);
+    assert.equal(resolved.stdout, `${process.version}\n${process.version}\n`);
+    assert.isTrue(require('../commands/nvm.ts').trustedNvmDirectory(directory, source));
+    assert.equal(runNode('process.exit(0)').status, 0);
+  });
+  it('accepts only an unchanged private copy of the controlled NVM runtime', () => {
+    cleanupSandbox(sandbox.root); sandbox = createSandbox({ quickstart: true });
+    const bin = path.join(sandbox.home, `.config/nvm/versions/node/${process.version}/bin`);
+    fs.mkdirSync(bin, { recursive: true });
+    const node = path.join(bin, 'node'); fs.copyFileSync(process.execPath, node);
+    assert.equal(runNode('process.exit(0)').status, 0);
+    fs.writeFileSync(node, '#!/bin/sh\nexit 0\n');
+    assert.notEqual(runNode('process.exit(0)').status, 0);
+    fs.unlinkSync(node); fs.symlinkSync(process.execPath, node);
+    assert.notEqual(runNode('process.exit(0)').status, 0);
+  });
+  const prepareNvmSource = (): string => {
+    cleanupSandbox(sandbox.root); sandbox = createSandbox({ quickstart: true });
+    const source = path.join(sandbox.home, '.config/nvm/nvm.sh');
+    fs.mkdirSync(path.dirname(source), { recursive: true });
+    fs.copyFileSync(path.join(sandbox.root, 'nvm-fixture.sh'), source);
+    return source;
+  };
+  const aclOptions = { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' }, encoding: 'utf8', shell: false };
+  it('allows exact NVM ACL probes and real trust checks for the controlled source and its ancestors', () => {
+    const source = prepareNvmSource();
+    const targets = [source];
+    while (targets.at(-1) !== '/') targets.push(path.dirname(targets.at(-1)!));
+    const result = runNode(`
+      const { spawnSync } = require('child_process');
+      for (const target of ${JSON.stringify(targets)}) {
+        const result = spawnSync('/bin/ls', ['-lde', target], ${JSON.stringify(aclOptions)});
+        if (result.error || (process.platform === 'darwin' && result.status !== 0)) throw new Error(result.stderr || 'ACL probe failed');
+      }
+      if (!require(${JSON.stringify(path.join(sandbox.source, 'commands/nvm.ts'))}).trustedNvmSource(${JSON.stringify(source)})) throw new Error('Controlled source was not trusted');
+    `);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  });
+  it('rejects unauthorized NVM ACL targets, arguments, environments, methods, and options', () => {
+    const source = prepareNvmSource();
+    const normal = ['-lde', source];
+    const attempts = [
+      { args: ['-lde', path.join(sandbox.home, '.zshrc')] },
+      { args: ['-lde', path.join(sandbox.root, 'nvm-fixture.sh')] },
+      { args: ['-lde', '/etc'] },
+      { args: ['-lde', `${path.dirname(source)}/../nvm/nvm.sh`] },
+      { args: ['-lde', path.dirname(source) + '/'] },
+      { args: ['-le', source] },
+      { args: [...normal, sandbox.home] },
+      { command: '/usr/bin/ls' },
+      { method: 'spawn' },
+      { method: 'execFileSync' },
+      { options: { ...aclOptions, shell: true } },
+      { options: { ...aclOptions, encoding: 'buffer' } },
+      { options: { ...aclOptions, cwd: sandbox.home } },
+      { options: { ...aclOptions, stdio: 'inherit' } },
+      { options: { ...aclOptions, env: { ...aclOptions.env, HOME: sandbox.home } } },
+      { options: { ...aclOptions, env: { ...aclOptions.env, PATH: sandbox.tools } } },
+      { options: { ...aclOptions, env: { ...aclOptions.env, LC_ALL: 'en_US.UTF-8' } } },
+      { options: { ...aclOptions, env: undefined } },
+      { extra: ', undefined' },
+    ];
+    for (const attempt of attempts) {
+      const result = runNode(`require('child_process')[${JSON.stringify(attempt.method ?? 'spawnSync')}](${JSON.stringify(attempt.command ?? '/bin/ls')}, ${JSON.stringify(attempt.args ?? normal)}, ${JSON.stringify(attempt.options ?? aclOptions)}${attempt.extra ?? ''})`);
+      assert.equal(result.status, 1, JSON.stringify(attempt));
+      assert.include(result.stderr, 'sandbox safeguard refused');
+    }
+    const base = JSON.stringify(aclOptions);
+    for (const options of [
+      `({...${base}, env: Object.assign(Object.create({HOME: '/wrong-home'}), ${JSON.stringify(aclOptions.env)})})`,
+      `Object.defineProperty(${base}, 'cwd', {value: ${JSON.stringify(sandbox.home)}})`,
+      `Object.defineProperty(${base}, 'encoding', {get: () => 'utf8'})`,
+    ]) {
+      const result = runNode(`require('child_process').spawnSync('/bin/ls', ${JSON.stringify(normal)}, ${options})`);
+      assert.equal(result.status, 1, options);
+      assert.include(result.stderr, 'sandbox safeguard refused');
+    }
+  });
+  it('rejects NVM ACL probes without the original canonical fixture source', () => {
+    const source = prepareNvmSource();
+    const contents = fs.readFileSync(source);
+    const rejected = () => {
+      const result = runNode(`require('child_process').spawnSync('/bin/ls', ['-lde', '/'], ${JSON.stringify(aclOptions)})`);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.include(result.stderr, 'sandbox safeguard refused');
+    };
+    fs.writeFileSync(source, '# changed fixture\n'); rejected();
+    fs.unlinkSync(source); rejected();
+    fs.mkdirSync(source); rejected(); fs.rmdirSync(source);
+    fs.symlinkSync(path.join(sandbox.root, 'nvm-fixture.sh'), source); rejected(); fs.unlinkSync(source);
+    const originalDirectory = path.dirname(source);
+    const redirected = path.join(sandbox.root, 'redirected-nvm');
+    fs.mkdirSync(redirected); fs.writeFileSync(path.join(redirected, 'nvm.sh'), contents);
+    fs.rmdirSync(originalDirectory); fs.symlinkSync(redirected, originalDirectory); rejected();
+  });
+  it('does not enable native NVM ACL probes in a non-Quickstart sandbox', () => {
+    const result = runNode(`require('child_process').spawnSync('/bin/ls', ['-lde', '/'], ${JSON.stringify(aclOptions)})`);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'sandbox safeguard refused');
+  });
   it('runs custom-host creation and backup through the guarded installer and installed CLI', () => {
     const remoteFile = path.join(sandbox.remote, 'repository.json');
     const remote = JSON.parse(fs.readFileSync(remoteFile, 'utf8')); remote.host = 'git.example.com';
     fs.writeFileSync(remoteFile, JSON.stringify(remote));
-    const install = runSandbox(sandbox, ['install'], 'y\nn\ny\ngit.example.com\ncreate\n\ny\ny\nn\n');
+    const install = runSandbox(sandbox, ['install'], 'y\ny\ngit.example.com\ncreate\n\ny\ny\nn\n');
     assert.equal(install.status, 0, install.stdout + install.stderr);
     assert.include(install.stdout, 'GitHub hostname [github.com]: ');
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
@@ -47,7 +163,7 @@ describe('onboarding sandbox', function() {
   });
 
   it('limits the backup scope read to the sandbox catalog and exact Git operation', () => {
-    const install = runSandbox(sandbox, ['install'], 'y\nn\nn\n');
+    const install = runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n');
     assert.equal(install.status, 0, install.stdout + install.stderr);
     const read = (args = ['show', 'HEAD:commands/backup_scope.json'], cwd = sandbox.repo) => (
       spawnSync(path.join(sandbox.tools, 'git'), args, {
@@ -95,7 +211,7 @@ describe('onboarding sandbox', function() {
   for (const name of ['auth', 'connection', 'timeout']) {
     it(`recovers installer backup setup after ${name} without reinstalling`, () => {
       selectScenario(sandbox, name);
-      const failed = runSandbox(sandbox, ['install'], 'y\nn\ny\n\n');
+      const failed = runSandbox(sandbox, ['install'], 'y\ny\n\n');
       assert.equal(failed.status, 1, failed.stdout + failed.stderr);
       assert.isTrue(fs.existsSync(path.join(sandbox.repo, 'ballin.config.json')));
       selectScenario(sandbox, 'none');
@@ -142,7 +258,7 @@ describe('onboarding sandbox', function() {
   });
   for (const name of ['self-update', 'update-failure']) {
     it(`recovers ${name} while continuing later update stages`, () => {
-      assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+      assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
       selectScenario(sandbox, name);
       const failed = runSandbox(sandbox, [name === 'self-update' ? 'self-update' : 'update']);
       assert.equal(failed.status, 1, failed.stdout + failed.stderr);
@@ -153,7 +269,7 @@ describe('onboarding sandbox', function() {
     });
   }
   it('announces update-stage readiness before process-group interruption and retry', async () => {
-    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
     selectScenario(sandbox, 'update-interrupt');
     const child = spawn(path.join(sandbox.bin, 'ballin'), ['update'], { cwd: sandbox.home, env: sandboxEnvironment(sandbox), detached: true, stdio: 'ignore' });
     const group = child.pid as number;
@@ -185,7 +301,7 @@ describe('onboarding sandbox', function() {
     assert.equal(runSandbox(sandbox, ['update']).status, 0);
   });
   it('saves only temporary analytics consent with mocked command and behavioral delivery', () => {
-    const installed = runSandbox(sandbox, ['install'], 'y\ny\nn\n');
+    const installed = runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\ny\n');
     assert.equal(installed.status, 0, installed.stdout + installed.stderr);
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
     assert.equal(config.analytics.enabled, 'true');
@@ -222,7 +338,7 @@ describe('onboarding sandbox', function() {
       const env = JSON.parse(result.stdout);
       assert.equal(env.HOME, sandbox.home);
       for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_HOST', 'BASH_ENV', 'ENV', 'BALLIN_TEST_CONFIG_PATH', 'BALLIN_BACKUP_HOST']) assert.notProperty(env, key);
-      assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+      assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
     });
     assert.isFalse(fs.existsSync(trap));
   });
@@ -318,7 +434,7 @@ describe('onboarding sandbox', function() {
   });
 
   it('runs maintenance with fresh installation defaults and the guarded installed self-update path', () => {
-    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
     assert.equal(config.update.selfUpdate, 'true');
     const update = runSandbox(sandbox, ['update']);
@@ -331,7 +447,7 @@ describe('onboarding sandbox', function() {
   });
 
   it('runs self-update and automatic backup through the real guarded installed CLI', () => {
-    const install = runSandbox(sandbox, ['install'], 'y\nn\ny\n\ncreate\n\ny\ny\ny\n');
+    const install = runSandbox(sandbox, ['install'], 'y\ny\n\ncreate\n\ny\ny\ny\n\n\n\n\ny\nn\n');
     assert.equal(install.status, 0, install.stdout + install.stderr);
     const config = JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
     assert.equal(config.update.selfUpdate, 'true');
@@ -347,7 +463,7 @@ describe('onboarding sandbox', function() {
   });
 
   it('refuses sibling executables and redirected targets beside the exact installed CLI', () => {
-    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
     const executable = path.join(sandbox.repo, 'bin/ballin');
     const sibling = path.join(sandbox.repo, 'bin/other');
     fs.symlinkSync(executable, sibling);
@@ -364,12 +480,13 @@ describe('onboarding sandbox', function() {
   });
 
   it('reuses an install for later opt-in and clean create/reconnect walkthrough resets', () => {
-    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
     assert.isTrue(fs.existsSync(path.join(sandbox.repo, 'completions/_ballin')));
     const setup = runSandbox(sandbox, ['backup', 'setup'], '\ncreate\n\ny\ny\n\n');
     assert.equal(setup.status, 0, setup.stdout + setup.stderr);
     assert.include(setup.stdout, 'sensitive sources');
-    assert.include(setup.stdout, 'Automatically');
+    assert.notInclude(setup.stdout, 'Automatically');
+    assert.include(setup.stdout, 'Run `ballin setup`');
     assert.isTrue(remote().exists);
     resetSandbox(sandbox, 'reconnect');
     const config = () => JSON.parse(fs.readFileSync(path.join(sandbox.repo, 'ballin.config.json'), 'utf8'));
@@ -435,7 +552,7 @@ describe('onboarding sandbox', function() {
   });
 
   it('stops the entire synchronous command group before timeout teardown', () => {
-    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\nn\n').status, 0);
+    assert.equal(runSandbox(sandbox, ['install'], 'y\nn\ny\n\n\n\n\nn\n').status, 0);
     const childPid = path.join(sandbox.scratch, 'timeout-child.pid');
     fs.writeFileSync(path.join(sandbox.repo, 'bin/ballin'), `#!/usr/bin/env node\nconst {spawn}=require('child_process'); const fs=require('fs'); const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'}); fs.writeFileSync(${JSON.stringify(childPid)},String(child.pid)); setInterval(()=>{},1000);`, { mode: 0o755 });
     assert.throws(() => runSandbox(sandbox, ['update'], undefined, 2000), /exceeded the 2000ms test timeout/u);
@@ -714,7 +831,7 @@ describe('interactive onboarding QA lifecycle', function() {
       assert.equal(actualPath.stdout.trim(), interpreter);
       const result = spawnSync(interpreter, [cli, '--keep'], {
         env, encoding: 'utf8', timeout: 240000,
-        input: 'y\nn\nn\nballin backup setup\n\ncreate\n\nn\ny\ny\nballin update\nexit\n',
+        input: 'y\nn\nn\nballin backup setup\n\ncreate\n\nn\ny\nballin setup\n\n\n\n\ny\nn\nballin update\nexit\n',
       });
       root = findRoot(result.stdout);
       assert.equal(result.status, 0, result.stdout + result.stderr);

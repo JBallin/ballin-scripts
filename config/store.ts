@@ -180,7 +180,9 @@ const createConfigStore = ({
     if (typeof prevVal === 'object' && prevVal !== null) {
       throw new ConfigError(configMessages.setObjErr(keys));
     }
+    if (keys === '_setup' || keys.startsWith('_setup.')) throw new ConfigError('Setup intent is internal state, not a configurable preference.');
     nestedObj[keyToSet] = val;
+    if (keys === 'update.nvm') delete configObj._setup;
     writeConfig(stringify(configObj));
     return configMessages.set(keys, val);
   };

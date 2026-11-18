@@ -1,4 +1,4 @@
-const { terminalCommand } = require('./terminalStyle.ts');
+const { displayPath, terminalCommand, terminalPath } = require('./terminalStyle.ts');
 const fs = require('fs');
 const path = require('path');
 const { recordBehavioralAnalyticsEvent } = require('./analytics.ts');
@@ -23,6 +23,7 @@ const {
   writeStderrLine,
 } = require('./commandHelpers.ts');
 import type { DoctorReport } from './doctor_report.ts';
+import type { NvmTrustFailure } from './nvm.ts';
 
 type NvmInstallResult = {
   captureFailed: boolean;
@@ -146,16 +147,18 @@ const parseEnvOutput = (output: string): NodeJS.ProcessEnv | null => {
   }
 };
 
-const runNvmInstall = (env: NodeJS.ProcessEnv): NvmInstallResult => {
+const runNvmInstall = (env: NodeJS.ProcessEnv, source?: string): NvmInstallResult => {
   const envPath = makeTempFile('ballin-update-env-');
   try {
     const result = runCommand('bash', [
       '-c',
-      '. "$NVM_DIR/nvm.sh"; nvm install --lts; nvm_status="$?"; node -e \'process.stdout.write(JSON.stringify(process.env))\' > "$BALLIN_UPDATE_ENV_PATH"; exit "$nvm_status"',
+      'unset -f nvm; . "$BALLIN_NVM_SOURCE" --no-use && declare -F nvm >/dev/null || exit 1; nvm install --lts; nvm_status="$?"; node -e \'process.stdout.write(JSON.stringify(process.env))\' > "$BALLIN_UPDATE_ENV_PATH"; exit "$nvm_status"',
     ], {
       env: {
         ...env,
         BALLIN_UPDATE_ENV_PATH: envPath,
+        BALLIN_NVM_SOURCE: source ?? path.join(env.NVM_DIR ?? '', 'nvm.sh'),
+        BASH_ENV: '', ENV: '',
       },
       stdio: 'inherit',
     });
@@ -186,6 +189,9 @@ const runNvmInstall = (env: NodeJS.ProcessEnv): NvmInstallResult => {
     }
 
     delete nextEnv.BALLIN_UPDATE_ENV_PATH;
+    delete nextEnv.BALLIN_NVM_SOURCE;
+    if (env.BASH_ENV === undefined) delete nextEnv.BASH_ENV; else nextEnv.BASH_ENV = env.BASH_ENV;
+    if (env.ENV === undefined) delete nextEnv.ENV; else nextEnv.ENV = env.ENV;
     return {
       captureFailed: false,
       env: nextEnv,
@@ -239,6 +245,15 @@ const runAutomaticStage = (
       // Analytics must not replace a child result or prevent later stages.
     }
   }
+};
+
+// Name the first failing path; the generic guidance below covers how to repair it.
+const nvmTrustFailureLabels: Record<NvmTrustFailure['kind'], string> = {
+  directory: 'Unsafe NVM folder or parent folder',
+  entry: 'Unsafe owner or permissions',
+  link: 'Unsafe symlink or link target',
+  acl: 'Write-granting ACL',
+  scan: 'Unable to scan (unreadable folder or link loop)',
 };
 
 function runUpdateCommand(): void {
@@ -308,10 +323,17 @@ function runUpdateCommand(): void {
 
   if (settings.nvm) {
     progress('Updating Node.js LTS');
-    const nvmDir = process.env.NVM_DIR ?? '';
-    const nvmScript = path.join(nvmDir, 'nvm.sh');
-    if (nvmDir && fs.existsSync(nvmScript) && fs.statSync(nvmScript).size > 0) {
-      const result = runNvmInstall(childEnv);
+    const { discoverNvm, untrustedNvmEntry } = require('./nvm.ts');
+    const installation = discoverNvm(childEnv);
+    const trustFailure: NvmTrustFailure | null = installation && untrustedNvmEntry(installation.directory, installation.source);
+    if (installation && trustFailure) {
+      reportDiagnostic('Unable to update Node.js LTS: the NVM working tree failed safety checks.');
+      reportDiagnostic(`${nvmTrustFailureLabels[trustFailure.kind]}: ${displayPath(terminalPath(trustFailure.path, childEnv.HOME))}`);
+      reportDiagnostic('Check its ownership, permissions, ACLs, and unreadable or linked paths before retrying. Ballin has not changed them.');
+      reportDiagnostic('https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#quickstart-helper');
+      recordFailure(1);
+    } else if (installation) {
+      const result = runNvmInstall({ ...childEnv, NVM_DIR: installation.directory }, installation.source);
       recordFailure(result.status);
       if (result.captureFailed) {
         reportDiagnostic('Unable to capture the updated Node.js environment after running nvm.');
