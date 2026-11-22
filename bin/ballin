@@ -1,3 +1,22 @@
 #!/usr/bin/env node
 
+const engines = require('../package.json').engines;
+const requirement = engines && engines.node;
+const match = typeof requirement === 'string' && /^>=\s*(\d+(?:\.\d+){0,2})$/.exec(requirement);
+if (!match) {
+  process.stderr.write('Ballin could not read engines.node in package.json. Expected a minimum Node.js version such as ">=24.12".\n');
+  process.exit(1);
+}
+const required = match[1];
+const minimum = required.split('.').map(Number);
+const installed = process.versions.node;
+const active = installed.split('.').map(Number);
+for (let index = 0; index < minimum.length; index++) {
+  if (active[index] > minimum[index]) break;
+  if (active[index] < minimum[index]) {
+    process.stderr.write(`Ballin requires Node.js ${required} or newer; found ${installed}. Upgrade or activate Node.js, then retry.\n`);
+    process.exit(1);
+  }
+}
+
 require('../commands/ballin.ts').runBallinCli();
