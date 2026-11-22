@@ -76,6 +76,9 @@
   Backup and config operations share pure command-owned name definitions with
   completion generation. Run `npm run generate:completions` after changing those
   names; tests check the committed shell assets against generated output.
+- When backup sources or collection scope change, follow the
+  [shared inclusion policy](docs/backup-design.md#shared-inclusion-policy) for
+  catalog updates, source disclosure, and when to increment `collectionPolicy`.
 - When installer behavior or invocation changes, update its tests and relevant
   guidance. Keep `README.md` concise; update it when user-facing changes would
   otherwise make its overview, prerequisites, or primary installation instructions
