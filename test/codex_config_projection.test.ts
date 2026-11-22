@@ -65,6 +65,39 @@ describe('Codex configuration runtime metadata projection', () => {
     assert.notInclude(output(modified), 'BROWSER_USE_CODEX_APP_VERSION');
   });
 
+  it('bounds service-map whitespace scanning for many custom services', () => {
+    const custom = Object.fromEntries(Array.from({ length: 4096 }, (_, i) => [`custom${i}`, `/synthetic/service-${i}.mjs`]));
+    const browser = '/synthetic/codex/plugins/cache/openai-bundled/browser/26.100.123/scripts/browser-service.mjs';
+    const services = ` \t\r\n${JSON.stringify({ browser, ...custom })}${' '.repeat(65536)}`;
+    const source = config.replace(/^NODE_REPL_TRUSTED_SERVICES = .*$/mu, `NODE_REPL_TRUSTED_SERVICES = ${JSON.stringify(services)}`);
+    const trim = String.prototype.trim;
+    let scanned = 0;
+    let result: Projection;
+    try {
+      String.prototype.trim = function() { scanned += this.length; return trim.call(this); };
+      result = project(source);
+    } finally {
+      String.prototype.trim = trim;
+    }
+    assert.isFalse(result.skipped);
+    assert.equal(result.bytes.toString(), config
+      .replace('BROWSER_USE_CODEX_APP_VERSION = "26.100.123"\n', '')
+      .replace(/^NODE_REPL_TRUSTED_SERVICES = .*$/mu, `NODE_REPL_TRUSTED_SERVICES = ${JSON.stringify(JSON.stringify(custom))}`));
+    // Count inspected characters rather than depend on wall-clock timing.
+    assert.isAtMost(scanned, services.length * 2);
+  });
+
+  for (const services of [' {} \t\r\n', ' { \n "browser" \t: "/synthetic/codex/plugins/cache/openai-bundled/browser/26.100.123/scripts/browser-service.mjs" \r\n } \t']) {
+    it(`preserves JSON whitespace handling for ${services.includes('browser') ? 'browser-only' : 'empty'} maps`, () => {
+      const source = config.replace(/^NODE_REPL_TRUSTED_SERVICES = .*$/mu, `NODE_REPL_TRUSTED_SERVICES = ${JSON.stringify(services)}`);
+      const result = project(source);
+      assert.isFalse(result.skipped);
+      assert.equal(result.bytes.toString(), services.includes('browser') ? config
+        .replace('BROWSER_USE_CODEX_APP_VERSION = "26.100.123"\n', '')
+        .replace(/^NODE_REPL_TRUSTED_SERVICES = .*$/mu, 'NODE_REPL_TRUSTED_SERVICES = "{}"') : source);
+    });
+  }
+
   for (const literal of [true, false]) {
     it(`keeps an escaped DEL valid in the projected service JSON and TOML (literal: ${literal})`, () => {
       let source = config.replace('/synthetic/service.mjs', '\\u007f');

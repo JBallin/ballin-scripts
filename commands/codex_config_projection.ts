@@ -154,7 +154,8 @@ const serviceMap = (source: string): Map<string, string> => {
   const map = new Map<string, string>();
   let offset = source.search(/\S/u);
   if (source[offset++] !== '{') throw new Error('Unsupported service map');
-  while (source.slice(offset).trim() !== '}') {
+  while (/\s/u.test(source[offset] ?? 'x')) offset += 1;
+  while (source[offset] !== '}') {
     pair.lastIndex = offset;
     const match = pair.exec(source);
     if (!match) throw new Error('Unsupported service map');
