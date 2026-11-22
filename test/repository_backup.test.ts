@@ -2808,7 +2808,7 @@ describe('repository backup lifecycle', function() {
       if(fd===0) throw Object.assign(Error('fixture secret must not be printed'), {code:'EAGAIN'});
       return read(fd,...args); };`);
     assert.equal(result.status, 1); assert.include(result.stderr, 'Unable to read prompt input (stdin read: EAGAIN).');
-    assert.include(result.stderr, 'run `ballin setup` again.'); assert.notInclude(result.stdout + result.stderr, 'fixture secret');
+    assert.include(result.stderr, 'Run `ballin setup` again to finish reviewing preferences.'); assert.notInclude(result.stdout + result.stderr, 'fixture secret');
     assert.deepEqual(config().backup.repository, fixtureDestination); assert.equal(config().backup.includeSensitive, 'false');
     assert.equal(config().update.backup, 'false'); assert.isTrue(state().exists);
     assert.lengthOf(mutations().filter(request => request.endpoint === 'user/repos'), 1);
