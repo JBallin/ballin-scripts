@@ -1,6 +1,6 @@
 const fs = require('fs');
 const {
-  RepositoryError, readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead,
+  RepositoryError, formatRepositoryError, readRepositoryAccount, candidateRepository, inspectRepository, requireRepositoryRead,
   createRepositoryBackup, ensureManagedBranchRuleset, publishRepositorySnapshots,
   repositoryCacheDirectory, repositoryUrl, repositoryReadmeContents, managedBranchRulesetName,
   readRepositorySnapshot, readRepositoryInventory, repositoryOpenUrl, inspectRepositoryMaintenance,
@@ -941,6 +941,95 @@ describe('private repository transport', () => {
       else assert.throws(() => publishRepositorySnapshots(before, changes(), options), RepositoryError, 'publication is unconfirmed');
       assert.equal(publications().length, 1);
     });
+  }
+  for (const [problem, response] of [
+    ['timeout', { status: 1, stdout: '', stderr: 'request timed out DUMMY_PRIVATE_ERROR' }],
+    ['connection', { status: 1, stdout: '', stderr: 'connection reset by peer DUMMY_PRIVATE_ERROR' }],
+    ['authentication', { status: 4, stdout: '', stderr: 'DUMMY_PRIVATE_ERROR' }],
+    ['invalid-data', { status: 0, stdout: 'DUMMY_PRIVATE_ERROR', stderr: '' }],
+  ] as const) {
+    it(`retains safe ${problem} evidence when publication succeeds but confirmation fails`, () => {
+      const before = read();
+      let published = false;
+      options.runCommand = (_command, args, opts) => {
+        if (published) return response;
+        const result = requestFixture(state, args, opts);
+        if (String(opts.input).includes('BallinPublish')) published = true;
+        return result;
+      };
+      let caught: unknown;
+      try { publishRepositorySnapshots(before, changes(), options); } catch (error) { caught = error; }
+      assert.instanceOf(caught, RepositoryError);
+      const failure = caught as import('../commands/backup_repository.ts').RepositoryError;
+      assert.equal(failure.problem, 'uncertain');
+      assert.equal(failure.confirmationProblem, problem);
+      assert.isUndefined(failure.publicationConfirmed);
+      const message = formatRepositoryError(failure, {});
+      assert.include(message, 'Backup publication is unconfirmed. Cache contents were not advanced; rerun to read and reconcile.');
+      assert.include(message, 'Confirmation check:');
+      assert.notInclude(message, 'DUMMY_PRIVATE_ERROR');
+      assert.equal(publications().length, 1);
+      assert.notEqual(state.head, before.revision.head);
+      options.runCommand = run;
+      assert.equal(read().snapshots.get('zshrc.sh')?.toString(), 'updated\n');
+    });
+  }
+  it('formats only typed bounded diagnostics and retains mismatch uncertainty', () => {
+    assert.isUndefined(formatRepositoryError(new Error('DUMMY_PRIVATE_ERROR')));
+    assert.include(formatRepositoryError(new RepositoryError('timeout')), 'timed out');
+    assert.notInclude(formatRepositoryError(new RepositoryError('uncertain')), 'Confirmation check:');
+    const before = read();
+    state.faults.publish = 'wrong-readback';
+    let caught: unknown;
+    try { publishRepositorySnapshots(before, changes(), options); } catch (error) { caught = error; }
+    assert.equal((caught as import('../commands/backup_repository.ts').RepositoryError).confirmationProblem, 'mismatch');
+    assert.include(formatRepositoryError(caught), 'returned revision or contents did not match');
+  });
+  for (const [mutationResponse, mutationFamily] of [
+    [{ status: 1, stdout: '', stderr: 'request timed out DUMMY_PRIVATE_MUTATION_ERROR' }, 'transport'],
+    [{ status: 4, stdout: '', stderr: 'DUMMY_PRIVATE_MUTATION_ERROR' }, 'authentication'],
+    [{ status: 0, stdout: 'DUMMY_PRIVATE_MUTATION_ERROR', stderr: '' }, 'unknown'],
+  ] as const) {
+    for (const [confirmationResponse, confirmationProblem, category] of [
+      [{ status: 1, stdout: '', stderr: 'connection reset by peer DUMMY_PRIVATE_ERROR' }, 'connection',
+        mutationFamily === 'transport' ? 'transport' : 'unknown'],
+      [{ status: 4, stdout: '', stderr: 'DUMMY_PRIVATE_ERROR' }, 'authentication',
+        mutationFamily === 'authentication' ? 'authentication' : 'unknown'],
+      [undefined, 'mismatch', 'unknown'],
+    ] as const) {
+      it(`aggregates ${mutationFamily} mutation evidence with ${confirmationProblem} readback`, () => {
+        const before = read();
+        let published = false;
+        options.runCommand = (_command, args, opts) => {
+          if (published && confirmationResponse) return confirmationResponse;
+          if (String(opts.input).includes('BallinPublish')) {
+            // Record exactly one request without applying it, so coherent readback is a mismatch.
+            state.requests.push({ endpoint: 'graphql', method: 'POST', payload: JSON.parse(String(opts.input)) });
+            published = true;
+            return mutationResponse;
+          }
+          return requestFixture(state, args, opts);
+        };
+        let caught: unknown;
+        try { publishRepositorySnapshots(before, changes(), options); } catch (error) { caught = error; }
+        assert.instanceOf(caught, RepositoryError);
+        const failure = caught as import('../commands/backup_repository.ts').RepositoryError;
+        assert.equal(failure.problem, 'uncertain');
+        assert.equal(failure.mutationFailureFamily, mutationFamily);
+        assert.equal(failure.confirmationProblem, confirmationProblem);
+        const evidence = {};
+        require('../commands/backup_outcome.ts').observeRepositoryFailure(evidence, failure);
+        assert.deepEqual(evidence, { category });
+        const detail = confirmationProblem === 'mismatch'
+          ? 'The returned revision or contents did not match the expected backup.'
+          : require('../commands/backup_repository.ts').repositoryMessages[confirmationProblem];
+        assert.equal(formatRepositoryError(failure, {}),
+          `Backup publication is unconfirmed. Cache contents were not advanced; rerun to read and reconcile. Confirmation check: ${detail}`);
+        assert.isUndefined(failure.publicationConfirmed);
+        assert.lengthOf(publications(), 1);
+        assert.equal(state.head, before.revision.head);
+      });
+    }
   }
   ['advance', 'rewind', 'reject', 'denied'].forEach((mode) => {
     it(`refuses ${mode} publication without forcing or retrying`, () => {

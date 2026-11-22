@@ -13,9 +13,17 @@ const {
 import type { RepositoryDestination } from './backup_config.ts';
 import type { SnapshotNameClassification } from './backup_snapshots.ts';
 import type { SpawnSyncOptions } from 'child_process';
+import type { BackupFailureCategory } from './backup_outcome.ts';
 
 type RepositoryProblem = 'prerequisite' | 'authentication' | 'connection' | 'timeout' | 'request' | 'resource-limit' | 'unavailable' | 'identity' | 'unsupported'
   | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
+const repositoryFailureCategory = (problem: RepositoryProblem | 'mismatch' | undefined): BackupFailureCategory => {
+  if (problem === 'connection' || problem === 'timeout') return 'transport';
+  if (problem === 'authentication') return 'authentication';
+  if (problem === 'moved') return 'reconciliation';
+  if (problem === 'local-io' || problem === 'cleanup') return 'local_state';
+  return 'unknown';
+};
 const repositoryMessages: Record<RepositoryProblem, string> = {
   'resource-limit': 'Backup exceeds normal CLI limits (32 MiB per snapshot, 64 MiB per full snapshot set, or transport limits). Stored data is retained. Use `ballin backup open`, or inspect the selected repository directly in GitHub. Details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits',
   prerequisite: 'GitHub CLI (gh) was not found on PATH. Install it from https://cli.github.com/ or make your existing installation available on PATH, then rerun `ballin backup setup`.',
@@ -54,11 +62,26 @@ class RepositoryError extends Error {
   missingRepositoryNode?: boolean;
   reconciliationFailed?: boolean;
   publicationConfirmed?: boolean;
+  confirmationProblem?: RepositoryProblem | 'mismatch';
+  mutationFailureFamily?: BackupFailureCategory;
   constructor(problem: RepositoryProblem) {
     super(repositoryMessages[problem]);
     this.problem = problem;
   }
 }
+// Keep the publication outcome separate from the bounded reason readback failed.
+// Never include provider text, paths, snapshot contents, or raw exception messages.
+const formatRepositoryError = (
+  error: unknown, stream: { isTTY?: boolean } = process.stdout, host = 'github.com',
+): string | undefined => {
+  if (!(error instanceof RepositoryError)) return undefined;
+  const message = formatRepositoryMessage(error.problem, stream, host);
+  if (error.problem !== 'uncertain' || !error.confirmationProblem) return message;
+  const detail = error.confirmationProblem === 'mismatch'
+    ? 'The returned revision or contents did not match the expected backup.'
+    : formatRepositoryMessage(error.confirmationProblem, stream, host);
+  return detail ? `${message} Confirmation check: ${detail}` : message;
+};
 type RepositoryOptions = {
   env?: NodeJS.ProcessEnv;
   runCommand?: (command: string, args: string[], options: SpawnSyncOptions) => {
@@ -699,6 +722,7 @@ const publish = (
   additions.forEach((bytes, name) => expected.set(name, blobOid(bytes)));
   let result: ApiResult = { ok: false, body: {} };
   let transportFailure: RepositoryError | undefined;
+  let mutationFailureFamily: BackupFailureCategory | undefined;
   try { result = api(before.destination.host, 'graphql', {
     query: `mutation BallinPublish($input: CreateCommitOnBranchInput!) {
       createCommitOnBranch(input: $input) { commit { oid } }
@@ -712,9 +736,11 @@ const publish = (
     } },
   }, options); } catch (error) {
     rethrowInterruption(error);
+    mutationFailureFamily = repositoryFailureCategory(error instanceof RepositoryError ? error.problem : undefined);
     // Confirm possible remote effects, but cleanup failure must remain fatal.
     if (error instanceof RepositoryError && (error.cleanupFailed || error.problem === 'resource-limit')) transportFailure = error;
   }
+  if (!result.ok && mutationFailureFamily === undefined) mutationFailureFamily = repositoryFailureCategory(result.problem);
   const errors = result.body.errors;
   const data = isConfigObject(result.body.data) ? result.body.data as Record<string, unknown> : {};
   if (Array.isArray(errors) && errors.length && errors.every((error) => (
@@ -729,7 +755,13 @@ const publish = (
   const mutation = isConfigObject(data.createCommitOnBranch) ? data.createCommitOnBranch as Record<string, unknown> : {};
   const returnedCommit = isConfigObject(mutation.commit) ? (mutation.commit as Record<string, unknown>).oid : undefined;
   const confirmation = inspectRepository(before.destination, options);
-  if (confirmation.status !== 'complete') throw new RepositoryError('uncertain');
+  if (confirmation.status !== 'complete') {
+    const failure = new RepositoryError('uncertain');
+    failure.confirmationProblem = confirmation.problem;
+    failure.mutationFailureFamily = mutationFailureFamily;
+    failure.cleanupFailed = confirmation.cleanupFailed || result.cleanupFailed || Boolean(transportFailure?.cleanupFailed);
+    throw failure;
+  }
   const after = confirmation.read;
   if (
     (returnedCommit !== undefined && returnedCommit !== after.revision.head)
@@ -740,7 +772,13 @@ const publish = (
     || [...additions].some(([name, bytes]) => (
       name !== repositoryReadmeFileName && !after.snapshots.get(name)?.equals(bytes)
     ))
-  ) throw new RepositoryError('uncertain');
+  ) {
+    const failure = new RepositoryError('uncertain');
+    failure.confirmationProblem = 'mismatch';
+    failure.mutationFailureFamily = mutationFailureFamily;
+    failure.cleanupFailed = result.cleanupFailed || Boolean(transportFailure?.cleanupFailed);
+    throw failure;
+  }
   if (transportFailure) transportFailure.publicationConfirmed = true;
   if (transportFailure?.problem === 'resource-limit') {
     writeStderrLine('ballin backup: repository publication confirmed, but transport limits were exceeded; cache contents were not advanced');
@@ -838,7 +876,8 @@ const repositoryOpenUrl = (destination: RepositoryDestination, options: Reposito
 };
 
 module.exports = {
-  RepositoryError, repositoryMessages, formatRepositoryMessage, readRepositoryAccount, candidateRepository, inspectRepository,
+  repositoryFailureCategory,
+  RepositoryError, repositoryMessages, formatRepositoryMessage, formatRepositoryError, readRepositoryAccount, candidateRepository, inspectRepository,
   readRepositorySnapshot, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
   inspectRepositoryMaintenance,
   requireRepositoryRead, sameRepositoryRevision, unexpectedRepositoryEntries,

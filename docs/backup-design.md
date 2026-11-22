@@ -30,6 +30,11 @@ reliable evidence has an unconfirmed cause. Access/not-found ambiguity and
 incomplete inventory/content reads retain their fail-closed diagnostics. Raw
 provider output is never included in backup errors. Publication still requires
 independent confirmation, even when a connection failure follows a mutation.
+An unconfirmed publication retains the bounded confirmation reason and prints it
+as a separate confirmation-check detail. A readback timeout or authentication
+failure does not prove that publication failed. Revision/content mismatches stay
+unconfirmed without inferring a transport or access cause. Cache promotion still
+requires complete confirmation; diagnostic details never include raw provider text.
 
 Repository contents use a flat layout. Current snapshots use the exact filenames
 defined by Ballin. `.ballin-backup.json` is the repository marker, and newly
