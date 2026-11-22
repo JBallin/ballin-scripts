@@ -212,7 +212,12 @@ and size overflows stop the whole backup without replacing saved data. The raw f
 separate **16 MiB** read limit; filtered output shares the [Claude capture allowance](#capture-limits).
 
 Raw settings, global `.claude.json`, project-local configuration and fetched
-`plugins/` content remain excluded. Hooks embedded in separately selected agent
+`plugins/` content remain excluded. Project-local `.claude/settings.local.json`
+is excluded because it is project-specific and can contain permission approvals.
+Claude's [settings documentation](https://code.claude.com/docs/en/settings#settings-files-and-who-they-affect)
+lists `~/.claude/settings.json` for user settings, with no separate user-level
+`settings.local.json` documented; Ballin does not collect that local variant.
+Hooks embedded in separately selected agent
 Markdown remain intact. Ballin never executes definitions, follows external
 references, or restores approvals. See Claude's [settings documentation](https://code.claude.com/docs/en/settings).
 
