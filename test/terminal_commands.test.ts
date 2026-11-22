@@ -84,7 +84,9 @@ describe('command references at prose output boundaries', () => {
       assert.equal(recovery.status, 1);
       assert.equal(recovery.stdout, '');
       const icon = mode.styled ? '\x1b[0;31m✗\x1b[0m' : '✗';
-      assert.isTrue(recovery.stderr.startsWith(`\n${icon} Unable to read or validate local preferences.\nConfig is not valid JSON.\n`));
+      assert.isTrue(recovery.stderr.startsWith(`\n${icon} Config is not valid JSON.\n`));
+      assert.equal((recovery.stderr.match(/✗/gu) || []).length, 1);
+      assert.notInclude(recovery.stderr, 'Unable to read or validate local preferences.');
       assert.include(recovery.stderr.replace(/\s+/gu, ' '), `Repair the file, or run ${command('ballin config reset')} to replace it with defaults, then run ${command('ballin setup')} again.`);
       assert.notInclude(recovery.stderr, '\n\n', 'the final error and recovery stay consecutive');
       // Keep the resolved path complete and copyable, even when the platform's
