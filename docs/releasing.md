@@ -20,13 +20,9 @@ engines. Bootstrap protocol 2 supports only revisions carrying compatible packag
 metadata; older revisions are unsupported. For prelaunch entrypoint recovery, see
 [Installation testing](installation-testing.md#prelaunch-entrypoint-recovery).
 
-Stable is the permanent installer default. Before the first release, the public
-commands temporarily use the main script URL and explicitly set
-`BALLIN_UPDATE_TRACK=main` for Bash. Development installations must opt into main;
-there is no stable-to-main fallback. Version-only release preparation replaces
-those temporary commands with the intended versioned URL and removes the main
-override. That URL is not usable until the approved release is published. Running
-scripts refuse missing or unpublished releases before setup mutations.
+Stable is the permanent installer default. Development installations must opt
+into main explicitly; there is no stable-to-main fallback. Running scripts refuse
+missing or unpublished releases before setup mutations.
 
 Submit the preparation diff through a separately authorized PR and normal review.
 After merging, validate the exact merged SHA, including disposable macOS VM
@@ -62,3 +58,27 @@ outcome is uncertain, inspect existing state before retrying. Finally verify a
 fresh versioned install and existing-install self-update select the published
 release and preserve local state. GitHub Releases are the release-note history;
 do not maintain a duplicate changelog.
+
+## Temporary first-release rollout
+
+Retire this section after the first-release transition is verified in #659.
+Before the first release, public commands use the main entrypoint and explicitly
+set `BALLIN_UPDATE_TRACK=main` for Bash. Version-only release preparation replaces
+those commands with the intended versioned URL and removes the override. That
+URL is not usable until the approved release is published.
+
+Until production documentation is published and its destinations are verified,
+installer, Quickstart and CLI links use public GitHub docs. The protocol-1
+[recovery instructions](https://github.com/JBallin/ballin-scripts/blob/d5f6b1bc13bd6b3c6f2ea1e904dc00dd375bf3d3/docs/installation-testing.md#prelaunch-entrypoint-recovery)
+and [manual NVM activation](https://github.com/JBallin/ballin-scripts/blob/d5f6b1bc13bd6b3c6f2ea1e904dc00dd375bf3d3/docs/installation.md#manual-nvm-activation)
+use an immutable published candidate because main does not yet contain those
+sections. Select a separately reviewed full candidate SHA when following the
+recovery procedure; the documentation revision is not an installation selection.
+Keep this fallback reachable for old entrypoints after the rollout notes retire.
+
+The branded documentation cutover is a separate downstream site change (#671),
+after publication and verification of every linked page and anchor. It is not a
+prerequisite for merging this installer change. Recheck help, plain output and
+terminal hyperlinks at cutover, and refresh affected #669 gallery URL expectations
+and reviewed formatter profiles before regenerating evidence. Historical captures
+retain their original revisions and destinations.

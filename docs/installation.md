@@ -253,7 +253,9 @@ ordinary group-write, world-write, and write-granting ACLs are rejected.
 Quickstart and NVM updates also check the working tree before invoking NVM,
 including existing versions and cached files. A failed working-tree check names
 the first unsafe path, quoting unusual characters. Repair untrusted paths manually;
-Ballin does not change their permissions. These checks do not protect against
+Ballin does not change their permissions. If a Homebrew NVM working directory is
+missing, follow the setup instructions in `brew info nvm` before retrying; updates do not create
+or configure that directory. These checks do not protect against
 changes by the trusted owner or administrators. The temporary discovery probe
 contains ordinary NVM bookkeeping, but is not a shell sandbox.
 

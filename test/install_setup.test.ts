@@ -676,6 +676,51 @@ exit 1
     });
   }
 
+  for (const mode of ['fresh', 'refresh', 'self-update']) for (const destination of ['saved', 'invalid']) for (const ghAvailable of [false, true]) {
+    it(`honors explicit backup deferral in ${mode} mode (${destination}, gh: ${ghAvailable})`, () => {
+      installConfigSources();
+      const configPath = path.join(repoDir, 'ballin.config.json');
+      const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8'));
+      config.backup.repository = destination === 'saved' ? require('./helpers/repository.ts').fixtureDestination : {};
+      config.update.backup = 'true';
+      fs.writeFileSync(configPath, require('../config/store.ts').stringify(config));
+      const previous = fs.readFileSync(configPath);
+      if (ghAvailable) writeExecutable('gh', `#!/bin/sh
+printf '%s\\n' "$*" >> '${commandLogPath}'
+exit 1
+`);
+      const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', mode], {
+        encoding: 'utf8', input: '\n'.repeat(10), env: childEnvironment({ BALLIN_SKIP_BACKUP_SETUP: '1' }),
+      });
+      assert.equal(result.status, mode === 'self-update' ? 1 : 0, result.stdout + result.stderr);
+      if (mode === 'self-update' && destination === 'saved' && ghAvailable) assert.match(commandLog(), /^api /u);
+      else assert.equal(commandLog(), '');
+      if (mode !== 'self-update') {
+        assert.include(result.stdout, 'Change preferences with `ballin setup`.');
+        assert.notInclude(result.stdout, 'GitHub CLI');
+        assert.notInclude(result.stdout, 'backup destination configuration is invalid');
+      }
+      assert.deepEqual(fs.readFileSync(configPath), previous);
+    });
+  }
+
+  it('defers backup host validation even when a caller also passes a conflicting consented host', () => {
+    installConfigSources();
+    const configPath = path.join(repoDir, 'ballin.config.json');
+    const config = JSON.parse(fs.readFileSync(path.join(repoDir, 'config', '.defaultConfig.json'), 'utf8'));
+    config.backup.repository = {};
+    fs.writeFileSync(configPath, require('../config/store.ts').stringify(config));
+    const previous = fs.readFileSync(configPath);
+    const result = spawnSync(process.execPath, [installSetupPath, 'setup', repoDir, docsUrl, '', 'refresh'], {
+      encoding: 'utf8', input: 'n\n', env: childEnvironment({
+        BALLIN_SKIP_BACKUP_SETUP: '1', BALLIN_BACKUP_CHOICE: 'yes', BALLIN_BACKUP_HOSTNAME: 'https://invalid.example',
+      }),
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.include(result.stdout, 'Review your Ballin preferences?');
+    assert.deepEqual(fs.readFileSync(configPath), previous); assert.equal(commandLog(), '');
+  });
+
   it('replaces existing command symlinks', () => {
     fs.mkdirSync(binDir, { recursive: true });
     fs.symlinkSync(path.join(testDir, 'old-ballin'), path.join(binDir, 'ballin'));
@@ -1135,7 +1180,7 @@ require('https').request = () => {
     assert.equal(result.status, 0, result.stderr);
     assert.include(result.stdout.split("\n"), `✓ Created config: ${path.join(repoDir, 'ballin.config.json')}`);
     assert.isBelow(result.stdout.indexOf('Ballin installed successfully.'), result.stdout.indexOf('Set up private backups'));
-    assert.include(result.stdout, 'Backup details: getballin.com/docs/installation.html#optional-backup-setup-and-reconnect');
+    assert.include(result.stdout, 'Backup details: github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#optional-backup-setup-and-reconnect');
     assert.include(result.stdout, `${displayDocsUrl}#startup-files-and-manual-activation\n\n✓ Ballin installed successfully.`);
     assert.notInclude(result.stdout, 'Enable shell completion?');
     assert.include(result.stdout, 'Backup setup skipped.');

@@ -8,10 +8,19 @@ import type { Sandbox } from './helpers/onboarding.ts';
 
 const tty = { isTTY: true, columns: 18 };
 const capable = { TERM: 'xterm-256color', TERM_PROGRAM: 'iTerm.app', TERM_PROGRAM_VERSION: '3.5.0' };
-const guide = 'getballin.com/docs/installation.html#health-and-recovery';
+const guide = 'github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#health-and-recovery';
 const native = (label: string, url = 'https://' + guide): string => `\x1b]8;;${url}\x1b\\\x1b[34m${label}\x1b[0m\x1b]8;;\x1b\\`;
 
 describe('documentation link rendering', () => {
+  it('renders public GitHub documentation in help and prose with usable terminal targets', () => {
+    const address = 'github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#health-and-recovery';
+    const row = 'i Installation details: ' + address;
+    for (const format of [terminalProse, formatHelp]) {
+      assert.equal(stripAnsi(format(row, tty, {})), row);
+      assert.equal(format(row, tty, capable), '\x1b[0;34mi\x1b[0m ' + native('Installation details', 'https://' + address));
+    }
+  });
+
   for (const version of ['3.1.0', '3.5.0', '4.0']) it(`recognizes versioned iTerm2 ${version}`, () => {
     assert.isTrue(supportsHyperlinks(tty, { ...capable, TERM_PROGRAM_VERSION: version }));
   });

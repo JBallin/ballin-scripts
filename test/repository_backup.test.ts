@@ -177,7 +177,7 @@ describe('repository backup lifecycle', function() {
         };
       `);
       assert.equal(result.status, 1, result.stdout + result.stderr);
-      const target = 'getballin.com/docs/backup-design.html#normal-repository-resource-limits';
+      const target = 'github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits';
       const details = display === 'iTerm'
         ? '\x1b[0;34mi\x1b[0m \x1b]8;;https://' + target + '\x1b\\\x1b[34mDetails\x1b[0m\x1b]8;;\x1b\\'
         : (display === 'unknown' ? '\x1b[0;34mi\x1b[0m Details: \x1b[34m' + target + '\x1b[0m' : 'i Details: ' + target);
@@ -1395,7 +1395,7 @@ describe('repository backup lifecycle', function() {
     fs.writeFileSync(path.join(claude, 'skills', 'demo', '.support'), 'DUMMY_SUPPORT_SECRET');
     const result = run(['setup'], '\nreconnect\n\ny\nn\n');
     assert.equal(result.status, 0);
-    assert.include(result.stdout, 'Backup source details: getballin.com/docs/backup-sources.html#what-will-ballin-back-up');
+    assert.include(result.stdout, 'Backup source details: github.com/JBallin/ballin-scripts/blob/main/docs/backup-sources.md#what-will-ballin-back-up');
     assert.include(result.stdout, '~/.claude/agents');
     assert.include(result.stdout, '~/.claude/skills');
     assert.notInclude(result.stdout, 'Your choice also covers future supported sources.');
@@ -3340,7 +3340,7 @@ describe('repository backup lifecycle', function() {
         assert.equal(result.status, 1, result.stdout + result.stderr);
         assert.include(result.stderr, '64 MiB per full snapshot set');
         assert.include(result.stderr, 'Stored data is retained. Use `ballin backup open`, or inspect the selected repository directly in GitHub.');
-        assert.include(result.stderr, 'Details: getballin.com/docs/backup-design.html#normal-repository-resource-limits');
+        assert.include(result.stderr, 'Details: github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits');
         assert.isBelow(result.stderr.indexOf('Use `ballin backup open`'), result.stderr.indexOf('Details:'));
         assertOutcome('failure', 'local_state');
         assert.lengthOf(state().requests, 0);

@@ -108,14 +108,14 @@ const trustedNvmDirectory = (directory: string, source: string): boolean => untr
 
 // Resolve the formula's libexec directly. Its outer nvm.sh wrapper can mkdir/link
 // even with --no-use, so it must never be executed during discovery.
-const discoverNvm = (env: NodeJS.ProcessEnv = process.env): NvmInstallation | null => {
+const discoverNvm = (env: NodeJS.ProcessEnv = process.env, onUntrustedSource?: (source: string) => void): NvmInstallation | null => {
   const home = env.HOME;
   const directories = [env.NVM_DIR, env.XDG_CONFIG_HOME && path.join(env.XDG_CONFIG_HOME, 'nvm'), home && path.join(home, '.nvm')].filter(Boolean) as string[];
   for (const directory of directories) {
     if (!safeDirectory(directory)) continue;
     const file = `${directory}/nvm.sh`;
     if (!readableFile(file)) continue;
-    if (!trustedNvmSource(file)) return null;
+    if (!trustedNvmSource(file)) { onUntrustedSource?.(file); return null; }
     let source = fs.realpathSync(file);
     if (source.includes('/Cellar/nvm/')) {
       const stable = path.join(source.split('/Cellar/nvm/')[0], 'opt/nvm/libexec/nvm.sh');
@@ -136,7 +136,8 @@ const discoverNvm = (env: NodeJS.ProcessEnv = process.env): NvmInstallation | nu
   if (result.status !== 0 || !prefix || !safeDirectory(prefix)) return null;
   const source = path.join(prefix, 'opt/nvm/libexec/nvm.sh');
   const directory = env.NVM_DIR || (env.XDG_CONFIG_HOME ? path.join(env.XDG_CONFIG_HOME, 'nvm') : home && path.join(home, '.nvm'));
-  if (!directory || !safeDirectory(directory) || !readableFile(source) || !trustedNvmSource(source)) return null;
+  if (!directory || !safeDirectory(directory) || !readableFile(source)) return null;
+  if (!trustedNvmSource(source)) { onUntrustedSource?.(source); return null; }
   return { directory, source, completion: path.join(prefix, 'opt/nvm/etc/bash_completion.d/nvm'), method: 'homebrew' };
 };
 

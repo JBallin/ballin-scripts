@@ -328,10 +328,22 @@ function runUpdateCommand(): void {
   if (settings.nvm) {
     progress('Updating Node.js LTS');
     const { discoverNvm, untrustedNvmEntry } = require('./nvm.ts');
-    const installation = discoverNvm(childEnv);
-    const trustFailure: NvmTrustFailure | null = installation && untrustedNvmEntry(installation.directory, installation.source);
-    if (installation && trustFailure) {
-      reportDiagnostic('Unable to update Node.js LTS: the NVM working tree failed safety checks.');
+    let sourceFailure: NvmTrustFailure | null = null;
+    const installation = discoverNvm(childEnv, (source: string) => { sourceFailure = { kind: 'entry', path: source }; });
+    const trustFailure: NvmTrustFailure | null = sourceFailure || (installation && untrustedNvmEntry(installation.directory, installation.source));
+    let missingDirectory = false;
+    if (installation?.method === 'homebrew') {
+      try { fs.lstatSync(installation.directory); } catch (error) {
+        missingDirectory = (error as NodeJS.ErrnoException).code === 'ENOENT';
+      }
+    }
+    if (missingDirectory) {
+      reportDiagnostic(`Unable to update Node.js LTS: the NVM working directory does not exist: ${displayPath(terminalPath(installation.directory, childEnv.HOME))}`);
+      reportDiagnostic(`Complete your Homebrew NVM setup (see ${terminalCommand('brew info nvm', process.stderr)}), then retry, or disable this update with: ${terminalCommand('ballin config set update.nvm false', process.stderr)}`);
+      reportDiagnostic('https://github.com/JBallin/ballin-scripts/blob/d5f6b1bc13bd6b3c6f2ea1e904dc00dd375bf3d3/docs/installation.md#manual-nvm-activation');
+      recordFailure(1);
+    } else if (trustFailure) {
+      reportDiagnostic(`Unable to update Node.js LTS: the NVM ${sourceFailure ? 'source' : 'working tree'} failed safety checks.`);
       reportDiagnostic(`${nvmTrustFailureLabels[trustFailure.kind]}: ${displayPath(terminalPath(trustFailure.path, childEnv.HOME))}`);
       reportDiagnostic('Check its ownership, permissions, ACLs, and unreadable or linked paths before retrying. Ballin has not changed them.');
       reportDiagnostic('https://github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#quickstart-helper');

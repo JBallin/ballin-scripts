@@ -18,7 +18,7 @@ Use \`ballin backup setup\` for backup destinations and sensitive sources. Use \
 
 This review does not run updates, backups, or runtime installation.
 
-i Preferences: getballin.com/docs/optional-capabilities.html
+i Preferences: github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md
 `;
 
 type SetupOutcome = 'completed' | 'cancelled' | 'failed';
@@ -49,7 +49,7 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
     // Destination validation belongs to backup setup, not preference review.
     const nvm = inspectNvm();
     reviewing = true;
-    writeStdoutLine(terminalProse('i Optional capabilities: getballin.com/docs/optional-capabilities.html'));
+    writeStdoutLine(terminalProse('i Optional capabilities: github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md'));
     writeStdoutLine(`\n${terminalHeading('ballin update')}`);
     let savedChoice = false;
     const cancel = (): SetupOutcome => {
@@ -88,16 +88,17 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
   } catch (error) {
     rethrowInterruption(error);
     writeStderrLine();
-    writeStderrLine(terminalError(reviewing ? 'Unable to complete preference review; unconfirmed choices are unchanged.' : 'Unable to read or validate local preferences.', process.stderr));
     const message = reviewing
-      ? promptInputState() === 'failed' ? 'Prompt input could not be read.'
+      ? promptInputState() === 'failed' ? 'Prompt input could not be read. Earlier confirmed choices remain saved.'
         : 'Unable to save preferences; the pending choice is unchanged.'
       : /^(?:Invalid |Config is not valid JSON|Unable to (?:read config|create local config))/.test((error as Error).message)
-        ? (error as Error).message : 'Check local config access and structure.';
-    const recovery = !reviewing && /^(?:Invalid |Config is not valid JSON)/u.test((error as Error).message)
+        ? (error as Error).message : 'Unable to read local preferences. Check local config access and structure.';
+    const recovery = reviewing && promptInputState() === 'failed'
+      ? `Run ${terminalCommand('ballin setup', process.stderr)} again to finish reviewing preferences.`
+      : !reviewing && /^(?:Invalid |Config is not valid JSON)/u.test((error as Error).message)
       ? `Repair the file, or run ${terminalCommand('ballin config reset', process.stderr)} to replace it with defaults, then run ${terminalCommand('ballin setup', process.stderr)} again.`
       : `Check the config file and its directory, then run ${terminalCommand('ballin setup', process.stderr)} again.`;
-    writeStderrLine(terminalProse(message, process.stderr));
+    writeStderrLine(terminalError(message, process.stderr));
     writeStderrLine(`Configuration file: ${configurationPath(file)}`);
     writeStderrLine(terminalProse(recovery, process.stderr));
     return 'failed';

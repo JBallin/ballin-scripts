@@ -97,7 +97,7 @@ const terminalChoice = (label: string, stream: { isTTY?: boolean } = process.std
 );
 // Strip owned SGR and OSC 8 wrappers, retaining their visible labels for width.
 const stripAnsi = (text: string): string => text.replace(/\x1b\[[0-9;]*m/gu, '').replace(/\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\)/gu, '');
-const documentationRow = (text: string): RegExpExecArray | null => /^i ([^:\n]+): ((?:https?:\/\/|getballin\.com\/)\S*)$/u.exec(stripAnsi(text));
+const documentationRow = (text: string): RegExpExecArray | null => /^i ([^:\n]+): ((?:https?:\/\/|getballin\.com\/|github\.com\/JBallin\/ballin-scripts\/)\S*)$/u.exec(stripAnsi(text));
 const isDocumentationRow = (text: string): boolean => documentationRow(text) !== null;
 const supportsHyperlinks = (stream: { isTTY?: boolean }, env: NodeJS.ProcessEnv): boolean => {
   if (!supportsEmphasis(stream, env) || !env.TERM || !/^(?:xterm|wezterm)(?:-|$)/u.test(env.TERM)
@@ -117,6 +117,9 @@ const terminalDocumentation = (
   if (['getballin.com', 'getballin.com/', 'https://getballin.com', 'https://getballin.com/'].includes(url)) {
     const address = env.TERM_PROGRAM === 'Apple_Terminal' ? 'getballin.com' : 'getballin.com/';
     return terminalMarkers('i ', stream, env) + `${safeLabel}: ` + terminalColor(address, 34, stream, env);
+  }
+  if (url === 'github.com/JBallin/ballin-scripts/tree/main/docs') {
+    return terminalMarkers('i ', stream, env) + `${safeLabel}: ` + terminalColor(display, 34, stream, env);
   }
   let target: string | undefined;
   if (!/[\x00-\x20\x7f-\x9f]/u.test(url) && safeLabel === label) {

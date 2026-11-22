@@ -5,9 +5,9 @@ const path = require('path');
 
 const installPath = path.join(__dirname, '..', 'install.sh');
 const terminalGuidance = '✓ Setup complete.\nOpen a new Terminal and run `ballin help`.';
-const docsUrl = 'getballin.com/docs/installation.html';
+const docsUrl = 'github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 const troubleshootingUrl = `${docsUrl}#health-and-recovery`;
-const analyticsDocsUrl = 'getballin.com/docs/analytics.html#what-will-analytics-share';
+const analyticsDocsUrl = 'github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share';
 
 type RunInstallOptions = {
   env?: NodeJS.ProcessEnv;
@@ -199,6 +199,21 @@ ballin_download() { : > "$2"; }
     fs.rmSync(homeDir, { recursive: true, force: true });
   });
 
+  it('keeps unsupported-contract recovery on immutable public GitHub documentation without setup changes', () => {
+    installBaseCommands();
+    writeCurrentCheckout();
+    fs.writeFileSync(path.join(repoDir, 'package.json'), JSON.stringify({ ballin: { installerProtocol: 1 } }));
+    const config = fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8');
+    const result = runInstall({ env: { FAKE_INSTALL_MODE: 'self-update' } });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'Installed updater uses an unsupported contract.');
+    assert.include(result.stderr, 'i Recovery: github.com/JBallin/ballin-scripts/blob/d5f6b1bc13bd6b3c6f2ea1e904dc00dd375bf3d3/docs/installation-testing.md#prelaunch-entrypoint-recovery\n');
+    assert.notInclude(result.stderr, 'getballin.com');
+    assert.notInclude(commandLog().join('\n'), 'install_setup');
+    assert.notInclude(commandLog().join('\n'), 'repo_update selected helper');
+    assert.equal(fs.readFileSync(path.join(repoDir, 'ballin.config.json'), 'utf8'), config);
+  });
+
   it('ends a cancelled revision change without setup, failure guidance, or success output', () => {
     installBaseCommands(); writeCurrentCheckout();
     const resultFile = path.join(homeDir, 'result');
@@ -310,7 +325,7 @@ ballin_download() { : > "$2"; }
     assert.notInclude(result.stdout, 'analytics');
     assert.notInclude(result.stdout, '.backup-cache');
     assert.include(result.stdout, `Installation details: ${docsUrl}#what-will-installation-change\n? Proceed with installation? [y/N] `);
-    assert.lengthOf(result.stdout.match(/getballin\.com\/[^\s]+/gu) ?? [], 1);
+    assert.lengthOf(result.stdout.match(/github\.com\/JBallin\/ballin-scripts\/[^\s]+/gu) ?? [], 1);
     assert.deepEqual(commandLog(), [
       `git:clone --no-checkout https://github.com/JBallin/ballin-scripts.git ${repoDir}`,
       'node:repo_update selected helper',
@@ -490,7 +505,7 @@ ballin_download() { : > "$2"; }
     assert.notInclude(result.stdout, 'ERROR:');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'Install supported Node.js');
-    assert.include(result.stdout, 'i Node.js details: getballin.com/docs/optional-capabilities.html#nodejs\n');
+    assert.include(result.stdout, 'i Node.js details: github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
     assert.notInclude(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');
@@ -598,7 +613,7 @@ ${outcome === '130' || outcome === '143' ? `exit ${outcome}` : `kill -${outcome}
     assert.notInclude(result.stdout, 'ERROR:');
     assert.notInclude(result.stdout, troubleshootingUrl);
     assert.include(result.stdout, 'existing installation method');
-    assert.include(result.stdout, 'i Node.js details: getballin.com/docs/optional-capabilities.html#nodejs\n');
+    assert.include(result.stdout, 'i Node.js details: github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs\n');
     assert.notInclude(result.stdout, 'brew install node');
     assert.include(result.stdout, 'run this installer again');
     assert.notInclude(result.stdout, 'Installation plan');

@@ -179,8 +179,10 @@ const setup = (
   if (!originalConfig) {
     return false;
   }
+  const backupSetupAllowed = mode === 'self-update'
+    || (process.env.BALLIN_BACKUP_CHOICE !== 'no' && process.env.BALLIN_SKIP_BACKUP_SETUP !== '1');
   let hostname: string | undefined;
-  if (process.env.BALLIN_BACKUP_CHOICE === 'yes' && process.env.BALLIN_BACKUP_HOSTNAME !== undefined) {
+  if (backupSetupAllowed && process.env.BALLIN_BACKUP_CHOICE === 'yes' && process.env.BALLIN_BACKUP_HOSTNAME !== undefined) {
     try {
       const destination = configuredBackupDestination(originalConfig);
       if (destination.kind === 'invalid') throw new Error('Invalid backup destination; disconnect before choosing another host.');
@@ -231,10 +233,8 @@ const setup = (
   let backupSetupCancelled = false;
   let generalReview = false;
   const interactive = mode !== 'self-update' && promptInputState() === 'open';
-  const backupSetupAllowed = mode === 'self-update' || process.env.BALLIN_BACKUP_CHOICE !== 'no';
   if (mode !== 'self-update' && (interactive || backupConfigured || backupInvalid)) writeStdoutLine(`\n${terminalComplete('Ballin installed successfully.')}`);
-  if (backupSetupAllowed && (backupConfigured || backupInvalid
-    || (interactive && process.env.BALLIN_SKIP_BACKUP_SETUP !== '1'))) {
+  if (backupSetupAllowed && (backupConfigured || backupInvalid || interactive)) {
     backupFlow = true;
     if (mode !== 'self-update') writeStdoutLine();
     backupSetupSucceeded = configureBackup(repoDir, docsUrl, {

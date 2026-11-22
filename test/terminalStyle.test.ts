@@ -113,7 +113,7 @@ describe('setup presentation roles', () => {
     assert.equal(terminalUrls(styled, tty, {}), styled);
   });
   it('keeps fallback Ballin documentation visible without schemes or hidden hyperlinks', () => {
-    const docs = 'getballin.com/docs/installation.html#health-and-recovery';
+    const docs = 'github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#health-and-recovery';
     assert.equal(terminalUrls('getballin.com/', tty, {}), 'getballin.com/');
     assert.equal(terminalUrls(docs + '.', tty, {}), docs + '.');
     const other = 'https://github.com/JBallin/ballin-scripts/issues https://github.com/JBallin/ballin-scripts/security https://github.com/JBallin/ballin-scripts/blob/main/install.sh https://cli.github.com/ https://github.com/fixture-user/private-backup';

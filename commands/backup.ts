@@ -88,7 +88,7 @@ type BackupConfigResult = {
   exitStatus: number;
 };
 
-const backupSetupDocsUrl = 'getballin.com/docs/installation.html';
+const backupSetupDocsUrl = 'github.com/JBallin/ballin-scripts/blob/main/docs/installation.md';
 
 const interactiveReadHint = (): boolean => Boolean(tty.isatty(0) && process.stdout.isTTY && process.stderr.isTTY);
 const writeDirectoryReadHint = (option: string): void => {

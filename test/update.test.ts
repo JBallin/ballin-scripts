@@ -1272,6 +1272,39 @@ kill -TERM "$$"
     }
   });
 
+  for (const method of ['official', 'homebrew']) it(`reports an unsafe ${method} NVM source without executing it`, () => {
+    const nvmDir = path.join(tempDir, 'custom-nvm');
+    const source = method === 'official' ? path.join(nvmDir, 'nvm.sh') : path.join(tempDir, 'brew/opt/nvm/libexec/nvm.sh');
+    fs.mkdirSync(path.dirname(source), { recursive: true });
+    fs.writeFileSync(source, 'printf sourced >> "$NVM_TEST_LOG"\n');
+    fs.chmodSync(source, 0o666);
+    if (method === 'homebrew') writeTestExecutable('brew', `#!/bin/sh\nif [ "$1" = --prefix ]; then printf '%s\\n' '${path.join(tempDir, 'brew')}'; fi\n`);
+    const result = runUpdate({ NVM_DIR: nvmDir });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'NVM source failed safety checks');
+    assert.include(result.stderr, source.replace(tempDir, '~'));
+    assert.include(result.stderr, 'ownership, permissions, ACLs');
+    assert.notInclude(result.stderr, 'unable to load nvm');
+    assert.notInclude(result.stderr, 'Set `NVM_DIR`');
+    assert.isFalse(fs.existsSync(logPath));
+  });
+
+  for (const location of ['default', 'explicit', 'xdg']) it(`explains a missing Homebrew NVM working directory (${location}) without creating or sourcing it`, () => {
+    const prefix = path.join(tempDir, 'brew'); const libexec = path.join(prefix, 'opt/nvm/libexec');
+    fs.mkdirSync(libexec, { recursive: true });
+    fs.writeFileSync(path.join(libexec, 'nvm.sh'), 'printf sourced >> "$NVM_TEST_LOG"\n');
+    writeTestExecutable('brew', `#!/bin/sh\nif [ "$1" = --prefix ]; then printf '%s\\n' '${prefix}'; fi\n`);
+    const nvmDir = path.join(tempDir, location === 'default' ? '.nvm' : location === 'explicit' ? 'custom-nvm' : 'config/nvm');
+    const result = runUpdate(location === 'explicit' ? { NVM_DIR: nvmDir } : location === 'xdg' ? { XDG_CONFIG_HOME: path.join(tempDir, 'config') } : {});
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.include(result.stderr, 'NVM working directory does not exist');
+    assert.include(result.stderr, location === 'default' ? '~/.nvm' : nvmDir.replace(tempDir, '~'));
+    assert.include(result.stderr, 'Complete your Homebrew NVM setup');
+    assert.notInclude(result.stderr, 'Unsafe NVM');
+    assert.notInclude(result.stderr, 'unable to load nvm');
+    assert.isFalse(fs.existsSync(nvmDir)); assert.isFalse(fs.existsSync(logPath));
+  });
+
   it('escapes an unsafe NVM path before naming it', () => {
     const nvmDir = path.join(tempDir, 'custom-nvm');
     installNvmStub(nvmDir);

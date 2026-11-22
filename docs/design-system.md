@@ -393,6 +393,11 @@ TTY output and plain text for redirected, dumb or `NO_COLOR` output. Do not
 force an underline. This address is available for terminal auto-detection;
 the slash form does not guarantee that every terminal will make it clickable.
 
+During the [temporary first-release rollout](releasing.md#temporary-first-release-rollout),
+use verified public GitHub destinations until branded documentation is published
+and verified. Keep the main-help GitHub documentation address visible without
+OSC 8, preserving the homepage's role; guide links retain the rules above.
+
 The initial conservative allowlist is versioned iTerm2 3.1+ and WezTerm date
 builds, identified through `TERM_PROGRAM` and `TERM_PROGRAM_VERSION` with an
 xterm/wezterm TERM. This is capability inference, not a guarantee about a local

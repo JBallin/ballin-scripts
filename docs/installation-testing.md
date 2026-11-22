@@ -18,6 +18,10 @@ Follow the [installation instructions](../README.md#installation) in the VM.
 
 ## Prelaunch entrypoint recovery
 
+*Temporary first-release rollout guidance for protocol-1 prelaunch installations.
+Retire this procedure after the first-release transition is verified; it is not
+the recovery procedure for published releases.*
+
 Protocol-1 prelaunch entrypoints cannot select protocol-2 revisions, including
 with an explicit SHA. They stop at the unsupported-contract error. This is a
 candidate-testing boundary; normal maintenance uses `ballin self-update`.

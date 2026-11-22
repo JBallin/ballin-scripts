@@ -130,7 +130,7 @@ const runUninstallCommand = (): void => {
   writeStdoutLine('Removed ~/.ballin-scripts and the ballin command links.');
   writeStdoutLine('Other tools and shell settings were left unchanged.');
   writeStdoutLine();
-  writeStdoutLine(terminalProse('i Removal details: getballin.com/docs/installation.html#uninstall'));
+  writeStdoutLine(terminalProse('i Removal details: github.com/JBallin/ballin-scripts/blob/main/docs/installation.md#uninstall'));
 };
 
 module.exports = {

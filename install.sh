@@ -284,7 +284,7 @@ documentation_pointer() {
   local label=$1 url=$2 stream=${3:-1} target='' safe_label safe_url
   status_marker info "$stream" >&"$stream"
   printf ' ' >&"$stream"
-  case "$url" in https://*) target=$url ;; getballin.com/*) target="https://$url" ;; esac
+  case "$url" in https://*) target=$url ;; github.com/JBallin/ballin-scripts/*) target="https://$url" ;; esac
   safe_label=${label//[[:cntrl:]]/}; safe_url=${url//[[:cntrl:]]/}
   if supports_hyperlinks "$stream" && [[ "$url" != *[[:cntrl:][:space:]]* && "$label" != *[[:cntrl:]]* && "$target" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?(/|[?#]|$) && "$target" != *'@'* ]]; then
     printf '\033]8;;%s\033\\\033[34m%s\033[0m\033]8;;\033\\\n' "$target" "$label" >&"$stream"
@@ -335,8 +335,8 @@ ballin_select "$@" || exit $?
 if [[ "${BALLIN_DEFER_TERMINAL_GUIDANCE:-0}" != 1 && "$ballin_mode" != self-update && ! -d "$HOME/.ballin-scripts" ]]; then phase 'Setting up Ballin'; fi
 
 repo_dir="$HOME/.ballin-scripts"
-docs_url='getballin.com/docs/installation.html'
-analytics_docs_url='getballin.com/docs/analytics.html#what-will-analytics-share'
+docs_url='github.com/JBallin/ballin-scripts/blob/main/docs/installation.md'
+analytics_docs_url='github.com/JBallin/ballin-scripts/blob/main/docs/analytics.md#what-will-analytics-share'
 required_node_version=$ballin_minimum
 repo_existed=true
 setup_mode='refresh'
@@ -401,7 +401,7 @@ fi
 if [ ! -x "$(command -v node)" ]; then
   printf '\n'; error_icon; printf ' Node.js %s or newer is required.\n' "$required_node_version"
   printf '\nInstall supported Node.js, then '; print_retry_guidance; printf '.\n'
-  documentation_pointer 'Node.js details' 'getballin.com/docs/optional-capabilities.html#nodejs'
+  documentation_pointer 'Node.js details' 'github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
   exit 1
 else
   node_check=$(node -p "
@@ -420,7 +420,7 @@ else
     fi
     printf '\n'
     printf '\nUpdate or activate Node.js using your existing installation method, then '; print_retry_guidance; printf '.\n'
-    documentation_pointer 'Node.js details' 'getballin.com/docs/optional-capabilities.html#nodejs'
+    documentation_pointer 'Node.js details' 'github.com/JBallin/ballin-scripts/blob/main/docs/optional-capabilities.md#nodejs'
     exit 1
   fi
 fi
@@ -563,7 +563,7 @@ if [[ "$ballin_mode" == self-update && "$ballin_applied" != true ]]; then
     status=$?
     [[ "$status" != 130 && "$status" != 143 ]] || exit "$status"
     ballin_error "Installed updater uses an unsupported contract."
-    documentation_pointer 'Recovery' 'getballin.com/docs/installation-testing.html#prelaunch-entrypoint-recovery' >&2
+    documentation_pointer 'Recovery' 'github.com/JBallin/ballin-scripts/blob/d5f6b1bc13bd6b3c6f2ea1e904dc00dd375bf3d3/docs/installation-testing.md#prelaunch-entrypoint-recovery' >&2
     exit 1
   fi
   if node "$repo_dir/commands/repo_update.ts" self-update "$repo_dir" "$ballin_kind" "$ballin_value" "$ballin_sha" "$ballin_minimum" "$ballin_release_id" "$command_preflight"; then exit 0

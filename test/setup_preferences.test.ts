@@ -55,7 +55,7 @@ describe('general preference review', () => {
       for (const key of ['npm', 'selfUpdate', 'cleanup', 'softwareupdate']) assert.equal(read().update[key], String(enabled));
       assert.equal(read().analytics.enabled, String(enabled));
       assert.equal(read().backup.includeSensitive, 'true'); assert.deepEqual(read().custom, { retained: true });
-      assert.equal(result.stdout.split('docs/optional-capabilities.html').length - 1, 1);
+      assert.equal(result.stdout.split('docs/optional-capabilities.md').length - 1, 1);
       assert.equal(result.stdout.split('Run `ballin backup setup`').length - 1, 1);
       assert.include(result.stdout, '==> ballin update'); assert.include(result.stdout, '==> Analytics');
       assert.notInclude(result.stdout, 'unchanged at'); assert.notInclude(result.stdout, 'set to `');
@@ -63,7 +63,7 @@ describe('general preference review', () => {
       assert.isBelow(result.stdout.indexOf('==> Analytics'), result.stdout.indexOf('i Analytics report command results, not backup contents.'));
       assert.isBelow(result.stdout.indexOf('i Analytics report command results, not backup contents.'), result.stdout.indexOf('i Analytics details:'));
       assert.isBelow(result.stdout.indexOf('i Analytics details:'), result.stdout.indexOf('Share usage analytics'));
-      assert.equal(result.stdout.split('docs/analytics.html').length - 1, 1);
+      assert.equal(result.stdout.split('docs/analytics.md').length - 1, 1);
       assert.notInclude(result.stdout, 'Change preferences');
     });
   }
@@ -117,7 +117,7 @@ describe('general preference review', () => {
       if (eligible || enabled) assert.include(result.stdout, `NVM? ${enabled ? '[Y/n]' : '[y/N]'}`);
       else assert.include(result.stdout, 'NVM is unavailable to setup.');
       assert.equal(result.stdout.includes('See Node.js setup in Optional capabilities.'), !eligible && !enabled);
-      assert.equal(result.stdout.split('docs/optional-capabilities.html').length - 1, 1);
+      assert.equal(result.stdout.split('docs/optional-capabilities.md').length - 1, 1);
     });
   }
   it('explains an ineligible NVM default without claiming runtime updates require it', () => {
@@ -128,7 +128,7 @@ describe('general preference review', () => {
     assert.include(result.stdout, 'See Node.js setup in Optional capabilities.');
     assert.notInclude(result.stdout, 'Update Node.js LTS through NVM');
     assert.notInclude(result.stdout, 'NVM is unavailable');
-    assert.equal(result.stdout.split('docs/optional-capabilities.html').length - 1, 1);
+    assert.equal(result.stdout.split('docs/optional-capabilities.md').length - 1, 1);
     assert.equal(read().update.nvm, 'false');
   });
   for (const installation of [false, true]) for (const changed of [false, true]) it(`saves ${changed ? 'changed' : 'unchanged'} preferences quietly (installation=${installation})`, () => {
@@ -267,8 +267,21 @@ describe('general preference review', () => {
     fs.appendFileSync(guard, "fs.renameSync = () => { throw Error('Synthetic save failure'); };\n");
     const before = fs.readFileSync(file, 'utf8'); const result = run('y\n'.repeat(6));
     assert.equal(result.status, 1); assert.notInclude(result.stdout, 'Update Ballin');
+    assert.equal((result.stderr.match(/✗/gu) || []).length, 1);
+    assert.include(result.stderr, 'Unable to save preferences; the pending choice is unchanged.');
+    assert.include(result.stderr, `Configuration file: ${JSON.stringify(file)}\nCheck`);
+    assert.notInclude(result.stderr, 'unconfirmed choices');
     assert.notInclude(result.stderr, 'save backup configuration'); assert.include(result.stderr, 'run `ballin setup` again.');
     assert.equal(fs.readFileSync(file, 'utf8'), before);
+  });
+  it('reports prompt failure once and preserves earlier confirmed choices', () => {
+    fs.appendFileSync(guard, `const readSync = fs.readSync; let lines = 0;
+      fs.readSync = (fd,...args) => { if(fd === 0 && lines >= 1) throw Error('Synthetic input failure');
+      const count = readSync(fd,...args); if(fd === 0 && args[0][0] === 10) lines++; return count; };`);
+    const result = run('y\ny\n');
+    assert.equal(result.status, 1); assert.equal(read().update.npm, 'true'); assert.equal(read().update.selfUpdate, 'true');
+    assert.equal((result.stderr.match(/✗/gu) || []).length, 1);
+    assert.include(result.stderr, `Prompt input could not be read. Earlier confirmed choices remain saved.\nConfiguration file: ${JSON.stringify(file)}\nRun \`ballin setup\` again`);
   });
   for (const signal of ['SIGINT', 'SIGTERM'] as const) it(`preserves current choice on ${signal}`, async () => {
     const child = spawn(process.execPath, [ballin, 'setup'], { env: testChildEnvironment({ HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: file }) });
@@ -278,7 +291,9 @@ describe('general preference review', () => {
     assert.equal(ended, signal); assert.equal(read().update.npm, 'true'); assert.equal(read().update.selfUpdate, 'true');
   });
   for (const contents of ['{', '[]', '{"update":[]}']) it(`preserves malformed config ${contents}`, () => {
-    fs.writeFileSync(file, contents); assert.equal(run().status, 1); assert.equal(fs.readFileSync(file, 'utf8'), contents);
+    fs.writeFileSync(file, contents); const result = run(); assert.equal(result.status, 1);
+    assert.equal((result.stderr.match(/✗/gu) || []).length, 1);
+    assert.notInclude(result.stderr, 'Unable to read or validate local preferences.'); assert.equal(fs.readFileSync(file, 'utf8'), contents);
   });
   for (const custom of [false, true]) it(`names the actual invalid JSON config without printing contents (custom=${custom})`, () => {
     const target = custom ? path.join(root, 'custom preferences.json') : file;
