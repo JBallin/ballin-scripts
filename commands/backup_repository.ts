@@ -13,9 +13,17 @@ const {
 import type { RepositoryDestination } from './backup_config.ts';
 import type { SnapshotNameClassification } from './backup_snapshots.ts';
 import type { SpawnSyncOptions } from 'child_process';
+import type { BackupFailureCategory } from './backup_outcome.ts';
 
 type RepositoryProblem = 'prerequisite' | 'authentication' | 'connection' | 'timeout' | 'request' | 'resource-limit' | 'unavailable' | 'identity' | 'unsupported'
   | 'invalid-data' | 'incomplete' | 'moved' | 'rejected' | 'uncertain' | 'local-io' | 'cleanup';
+const repositoryFailureCategory = (problem: RepositoryProblem | 'mismatch' | undefined): BackupFailureCategory => {
+  if (problem === 'connection' || problem === 'timeout') return 'transport';
+  if (problem === 'authentication') return 'authentication';
+  if (problem === 'moved') return 'reconciliation';
+  if (problem === 'local-io' || problem === 'cleanup') return 'local_state';
+  return 'unknown';
+};
 const repositoryMessages: Record<RepositoryProblem, string> = {
   'resource-limit': 'Backup exceeds normal CLI limits (32 MiB per snapshot, 64 MiB per full snapshot set, or transport limits). Stored data is retained. Use `ballin backup open`, or inspect the selected repository directly in GitHub. Details: https://github.com/JBallin/ballin-scripts/blob/main/docs/backup-design.md#normal-repository-resource-limits',
   prerequisite: 'GitHub CLI (gh) was not found on PATH. Install it from https://cli.github.com/ or make your existing installation available on PATH, then rerun `ballin backup setup`.',
@@ -55,6 +63,7 @@ class RepositoryError extends Error {
   reconciliationFailed?: boolean;
   publicationConfirmed?: boolean;
   confirmationProblem?: RepositoryProblem | 'mismatch';
+  mutationFailureFamily?: BackupFailureCategory;
   constructor(problem: RepositoryProblem) {
     super(repositoryMessages[problem]);
     this.problem = problem;
@@ -713,6 +722,7 @@ const publish = (
   additions.forEach((bytes, name) => expected.set(name, blobOid(bytes)));
   let result: ApiResult = { ok: false, body: {} };
   let transportFailure: RepositoryError | undefined;
+  let mutationFailureFamily: BackupFailureCategory | undefined;
   try { result = api(before.destination.host, 'graphql', {
     query: `mutation BallinPublish($input: CreateCommitOnBranchInput!) {
       createCommitOnBranch(input: $input) { commit { oid } }
@@ -726,9 +736,11 @@ const publish = (
     } },
   }, options); } catch (error) {
     rethrowInterruption(error);
+    mutationFailureFamily = repositoryFailureCategory(error instanceof RepositoryError ? error.problem : undefined);
     // Confirm possible remote effects, but cleanup failure must remain fatal.
     if (error instanceof RepositoryError && (error.cleanupFailed || error.problem === 'resource-limit')) transportFailure = error;
   }
+  if (!result.ok && mutationFailureFamily === undefined) mutationFailureFamily = repositoryFailureCategory(result.problem);
   const errors = result.body.errors;
   const data = isConfigObject(result.body.data) ? result.body.data as Record<string, unknown> : {};
   if (Array.isArray(errors) && errors.length && errors.every((error) => (
@@ -746,6 +758,7 @@ const publish = (
   if (confirmation.status !== 'complete') {
     const failure = new RepositoryError('uncertain');
     failure.confirmationProblem = confirmation.problem;
+    failure.mutationFailureFamily = mutationFailureFamily;
     failure.cleanupFailed = confirmation.cleanupFailed || result.cleanupFailed || Boolean(transportFailure?.cleanupFailed);
     throw failure;
   }
@@ -762,6 +775,7 @@ const publish = (
   ) {
     const failure = new RepositoryError('uncertain');
     failure.confirmationProblem = 'mismatch';
+    failure.mutationFailureFamily = mutationFailureFamily;
     failure.cleanupFailed = result.cleanupFailed || Boolean(transportFailure?.cleanupFailed);
     throw failure;
   }
@@ -862,6 +876,7 @@ const repositoryOpenUrl = (destination: RepositoryDestination, options: Reposito
 };
 
 module.exports = {
+  repositoryFailureCategory,
   RepositoryError, repositoryMessages, formatRepositoryMessage, formatRepositoryError, readRepositoryAccount, candidateRepository, inspectRepository,
   readRepositorySnapshot, readRepositorySnapshotWithInventory, readRepositoryInventory, repositoryOpenUrl,
   inspectRepositoryMaintenance,

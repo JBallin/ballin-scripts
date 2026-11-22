@@ -1,6 +1,7 @@
 import type { RepositoryError } from './backup_repository.ts';
-const { RepositoryError: BackupRepositoryError } = require('./backup_repository.ts') as {
+const { RepositoryError: BackupRepositoryError, repositoryFailureCategory } = require('./backup_repository.ts') as {
   RepositoryError: typeof RepositoryError;
+  repositoryFailureCategory: (problem: RepositoryError['confirmationProblem']) => BackupFailureCategory;
 };
 
 export type BackupFailureCategory = 'transport' | 'authentication' | 'reconciliation' | 'local_state' | 'unknown';
@@ -15,10 +16,11 @@ const observeRepositoryFailure = (evidence: BackupFailureEvidence, error: unknow
   if (error instanceof BackupRepositoryError) {
     const problem = error.problem === 'uncertain' ? error.confirmationProblem : error.problem;
     if (error.publicationConfirmed && error.cleanupFailed) category = 'local_state';
-    else if (problem === 'connection' || problem === 'timeout') category = 'transport';
-    else if (problem === 'authentication') category = 'authentication';
-    else if (problem === 'moved' || (error.problem === 'rejected' && error.reconciliationFailed)) category = 'reconciliation';
-    else if (problem === 'local-io' || problem === 'cleanup') category = 'local_state';
+    else if (error.problem === 'rejected' && error.reconciliationFailed) category = 'reconciliation';
+    else category = repositoryFailureCategory(problem);
+    if (error.problem === 'uncertain' && error.mutationFailureFamily !== undefined) {
+      observeBackupFailure(evidence, error.mutationFailureFamily);
+    }
   }
   observeBackupFailure(evidence, category);
   if (error instanceof BackupRepositoryError && error.cleanupFailed) observeBackupFailure(evidence, 'local_state');

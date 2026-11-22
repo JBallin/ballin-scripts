@@ -1524,15 +1524,22 @@ printf '%*s\\n' 1048577 '' >&2
       });
     }
 
-    for (const [category, response, message] of [
+    for (const [category, response, message, publishResponse] of [
       ['transport', { status: 1, stdout: '', stderr: 'request timed out DUMMY_PRIVATE_ERROR' }, 'timed out'],
       ['authentication', { status: 4, stdout: '', stderr: 'DUMMY_PRIVATE_ERROR' }, 'authentication'],
+      ['unknown', { status: 4, stdout: '', stderr: 'DUMMY_PRIVATE_ERROR' }, 'authentication',
+        { status: 1, stdout: '', stderr: 'request timed out DUMMY_PRIVATE_MUTATION_ERROR' }],
+      ['transport', { status: 1, stdout: '', stderr: 'connection reset by peer DUMMY_PRIVATE_ERROR' }, 'connection',
+        { status: 1, stdout: '', stderr: 'request timed out DUMMY_PRIVATE_MUTATION_ERROR' }],
+      ['authentication', { status: 4, stdout: '', stderr: 'DUMMY_PRIVATE_ERROR' }, 'authentication',
+        { status: 4, stdout: '', stderr: 'DUMMY_PRIVATE_MUTATION_ERROR' }],
     ] as const) {
-      it(`reports ${category} confirmation failure without advancing cache and recovers on rerun`, () => {
+      it(`reports ${category} confirmation failure without advancing cache and recovers on rerun (${message}, mutation ${publishResponse?.status ?? 'success'})`, () => {
         seedBackupCache('base\n'); seedRemote('base\n'); writeSnapshot('new value\n');
         const initialConfig = fs.readFileSync(configPath, 'utf8');
         const before = state();
         before.faults.afterPublishTransport = { target: 'user', response };
+        before.faults.publishResponse = publishResponse;
         saveState(before);
         const failed = observedRun();
         assert.equal(failed.status, 1);
@@ -1540,12 +1547,14 @@ printf '%*s\\n' 1048577 '' >&2
         assert.include(failed.stderr, 'Confirmation check:');
         assert.include(failed.stderr, message);
         assert.notInclude(failed.stderr, 'DUMMY_PRIVATE_ERROR');
+        assert.notInclude(failed.stderr, 'DUMMY_PRIVATE_MUTATION_ERROR');
         assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'base\n');
         assert.equal(fs.readFileSync(configPath, 'utf8'), initialConfig);
         assert.lengthOf(publicationCalls(), 1);
         assertOutcome('failure', 'failure', category);
         const published = state();
         delete published.faults.transport; delete published.faults.afterPublishTransport;
+        delete published.faults.publishResponse;
         saveState(published); capture.clear();
         assertBackupSucceeded(observedRun());
         assert.equal(fs.readFileSync(cachedSnapshotPath(), 'utf8'), 'new value\n');
