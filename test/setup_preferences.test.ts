@@ -198,8 +198,20 @@ describe('general preference review', () => {
     fs.appendFileSync(guard, "fs.renameSync = () => { throw Error('Synthetic save failure'); };\n");
     const before = fs.readFileSync(file, 'utf8'); const result = run('y\n'.repeat(6));
     assert.equal(result.status, 1); assert.notInclude(result.stdout, 'Keep Ballin');
+    assert.equal((result.stderr.match(/❌/gu) || []).length, 1);
+    assert.include(result.stderr, 'Unable to save preferences; the pending choice is unchanged.\nCheck');
+    assert.notInclude(result.stderr, 'unconfirmed choices');
     assert.notInclude(result.stderr, 'save backup configuration'); assert.include(result.stderr, 'run `ballin setup` again.');
     assert.equal(fs.readFileSync(file, 'utf8'), before);
+  });
+  it('reports prompt failure once and preserves earlier confirmed choices', () => {
+    fs.appendFileSync(guard, `const readSync = fs.readSync; let lines = 0;
+      fs.readSync = (fd,...args) => { if(fd === 0 && lines >= 1) throw Error('Synthetic input failure');
+      const count = readSync(fd,...args); if(fd === 0 && args[0][0] === 10) lines++; return count; };`);
+    const result = run('y\ny\n');
+    assert.equal(result.status, 1); assert.equal(read().update.npm, 'true'); assert.equal(read().update.selfUpdate, 'true');
+    assert.equal((result.stderr.match(/❌/gu) || []).length, 1);
+    assert.include(result.stderr, 'Prompt input could not be read. Earlier confirmed choices remain saved.\nRun `ballin setup` again');
   });
   for (const signal of ['SIGINT', 'SIGTERM'] as const) it(`preserves current choice on ${signal}`, async () => {
     const child = spawn(process.execPath, [ballin, 'setup'], { env: testChildEnvironment({ HOME: root, PATH: root, BALLIN_TEST_CONFIG_PATH: file }) });
@@ -209,7 +221,9 @@ describe('general preference review', () => {
     assert.equal(ended, signal); assert.equal(read().update.npm, 'true'); assert.equal(read().update.selfUpdate, 'true');
   });
   for (const contents of ['{', '[]', '{"update":[]}']) it(`preserves malformed config ${contents}`, () => {
-    fs.writeFileSync(file, contents); assert.equal(run().status, 1); assert.equal(fs.readFileSync(file, 'utf8'), contents);
+    fs.writeFileSync(file, contents); const result = run(); assert.equal(result.status, 1);
+    assert.equal((result.stderr.match(/❌/gu) || []).length, 1);
+    assert.notInclude(result.stderr, 'Unable to read or validate local preferences.'); assert.equal(fs.readFileSync(file, 'utf8'), contents);
   });
   it('does not replace a dangling config link', () => {
     fs.rmSync(file); const missing = path.join(root, 'missing'); fs.symlinkSync(missing, file);

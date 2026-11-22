@@ -88,16 +88,18 @@ const reviewGeneralPreferences = (file: string, options: { installation?: boolea
   } catch (error) {
     rethrowInterruption(error);
     writeStderrLine();
-    writeStderrLine(terminalError(reviewing ? 'Unable to complete preference review; unconfirmed choices are unchanged.' : 'Unable to read or validate local preferences.', process.stderr));
     const message = reviewing
-      ? promptInputState() === 'failed' ? 'Prompt input could not be read.'
+      ? promptInputState() === 'failed' ? 'Prompt input could not be read. Earlier confirmed choices remain saved.'
         : 'Unable to save preferences; the pending choice is unchanged.'
       : /^(?:Invalid |Config is not valid JSON|Unable to (?:read config|create local config))/.test((error as Error).message)
-        ? (error as Error).message : 'Check local config access and structure.';
-    const recovery = !reviewing && /^(?:Invalid |Config is not valid JSON)/u.test((error as Error).message)
+        ? (error as Error).message : 'Unable to read local preferences. Check local config access and structure.';
+    const recovery = reviewing && promptInputState() === 'failed'
+      ? `Run ${terminalCommand('ballin setup', process.stderr)} again to finish reviewing preferences.`
+      : !reviewing && /^(?:Invalid |Config is not valid JSON)/u.test((error as Error).message)
       ? `Repair the file, or run ${terminalCommand('ballin config reset', process.stderr)} to replace it with defaults, then run ${terminalCommand('ballin setup', process.stderr)} again.`
       : `Check the config file and its directory, then run ${terminalCommand('ballin setup', process.stderr)} again.`;
-    writeStderrLine(terminalProse(`${message}\n${recovery}`, process.stderr));
+    writeStderrLine(terminalError(message, process.stderr));
+    writeStderrLine(terminalProse(recovery, process.stderr));
     return 'failed';
   }
 };
