@@ -7,6 +7,8 @@ const { fixtureDestination, fixtureRuleset, fixtureState, installRepositoryFixtu
 const { repositoryCacheDirectory } = require('../commands/backup_repository.ts');
 const { configuredBackupDestination, sensitiveSourceConsent } = require('../commands/backup_config.ts');
 const { createAnalyticsCapture, fixtureInstallId } = require('./helpers/analytics.ts');
+const { codexRuntimeConfig } = require('./helpers/codex_config.ts');
+const { projectCodexConfig } = require('../commands/codex_config_projection.ts');
 import type { FixtureState } from './helpers/repository.ts';
 import type { CapturedAnalyticsEvent } from './helpers/analytics.ts';
 
@@ -1046,6 +1048,45 @@ describe('repository backup lifecycle', function() {
     assert.equal(remote('claude_skills.bundle.json'), prior);
     assert.lengthOf(publications(), 2);
   });
+  it('publishes a Codex runtime projection once, preserves history, and still captures preference changes', () => {
+    const codex = path.join(home, '.codex');
+    fs.mkdirSync(codex);
+    const original = codexRuntimeConfig();
+    const snapshot = 'codex_config.toml';
+    const source = path.join(codex, 'config.toml');
+    fs.writeFileSync(source, original);
+    saveState(fixtureState({ [snapshot]: original }));
+    seedCache(snapshot, original);
+    const oldHead = state().head;
+    const oldCommit = state().commits[oldHead];
+    ok(run());
+    const projected = projectCodexConfig(Buffer.from(original)).bytes.toString();
+    assert.equal(remote(snapshot), projected);
+    assert.equal(cached(snapshot), projected);
+    assert.deepEqual(state().commits[oldHead], oldCommit);
+    assert.equal(fs.readFileSync(source, 'utf8'), original);
+    const head = state().head;
+    const updatedVersion = codexRuntimeConfig('26.200.456', '26.201.789');
+    fs.writeFileSync(source, updatedVersion);
+    ok(run());
+    assert.equal(state().head, head);
+    assert.lengthOf(publications(), 1);
+    const changedPreference = updatedVersion.replace('STEPS_COMMANDS', 'STEPS_PROSE');
+    fs.writeFileSync(source, changedPreference);
+    ok(run());
+    assert.equal(remote(snapshot), projected.replace('STEPS_COMMANDS', 'STEPS_PROSE'));
+    assert.equal(cached(snapshot), remote(snapshot));
+    assert.equal(fs.readFileSync(source, 'utf8'), changedPreference);
+    assert.lengthOf(publications(), 2);
+    const unsupported = `custom = { secret = "DUMMY_PRIVATE_VALUE" }\n${changedPreference}`;
+    fs.writeFileSync(source, unsupported);
+    const fallback = run(); ok(fallback);
+    assert.include(fallback.stderr, 'Codex runtime metadata filtering skipped; configuration retained unchanged.');
+    assert.notInclude(fallback.stdout + fallback.stderr, 'DUMMY_PRIVATE_VALUE');
+    assert.equal(remote(snapshot), unsupported);
+    assert.equal(cached(snapshot), unsupported);
+  });
+
   [false, true].forEach((included) => {
     it(`publishes synthetic Codex sources with the existing sensitive preference: ${included}`, () => {
       const value = config();

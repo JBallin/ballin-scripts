@@ -459,9 +459,15 @@ independently of `CODEX_HOME`; legacy `CODEX_HOME/skills` remains
 identities, even when `CODEX_HOME=HOME/.agents` selects the same directory. Both staged archives count
 toward the combined byte budget, with separate per-source entry limits.
 
-Codex file capture is intact, including embedded trust settings in main/profile
-TOML, with existing final-newline/empty-file normalization. It does not execute
-or restore configuration. Recursive authoring directories use the shared
+Codex file capture preserves embedded trust settings in main/profile TOML, with
+existing final-newline/empty-file normalization. The main config collector first
+enforces the raw byte limit, then omits the narrowly recognized app version and
+bundled browser service mapping described in [source sensitivity](backup-sources.md#codex-configuration).
+Only the collected output changes; ordinary staging, comparison, publication,
+and cache promotion use that output. Unsupported syntax retains the entire file
+with a value-free diagnostic. Named profiles are not filtered, and neither live
+configuration nor prior commits are changed. Capture does not execute or restore
+configuration. Recursive authoring directories use the shared
 `ballin-directory` JSON format, version 2: sorted relative regular-file entries
 with an `executable` boolean and explicit `encoding`. UTF-8 text uses a `content`
 array containing one physical line per element, including its original LF/CRLF

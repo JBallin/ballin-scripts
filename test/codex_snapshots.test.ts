@@ -5,6 +5,8 @@ const { spawnSync } = require('child_process');
 const { snapshotDefinitions, observeSnapshotSources } = require('../commands/backup_snapshots.ts');
 const { checkedPath, fileEntry, readBoundedFile, recursiveFiles, reviewRecursiveFiles, recursiveSnapshot, snapshotByteLimit, SnapshotLimitError, SnapshotCwdError, sourceStat } = require('../commands/recursive_snapshot.ts');
 const { readDirectorySnapshot } = require('../commands/directory_snapshot.ts');
+const { codexRuntimeConfig } = require('./helpers/codex_config.ts');
+const { projectCodexConfig } = require('../commands/codex_config_projection.ts');
 import type { SnapshotDefinition } from '../commands/backup_snapshots.ts';
 
 const collectorPath = path.resolve(__dirname, '../commands/recursive_snapshot.ts');
@@ -63,6 +65,43 @@ describe('Codex durable snapshots', () => {
     });
   });
 
+  it('filters only the main config snapshot without changing the source or named profiles', () => {
+    const content = codexRuntimeConfig();
+    const main = write('config.toml', content);
+    const profile = write('work.config.toml', content);
+    const result = capture('codex_config.toml');
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.equal(result.stdout, projectCodexConfig(Buffer.from(content)).bytes.toString());
+    const profiles = capture('codex_profiles.bundle.json');
+    assert.equal(profiles.status, 0, profiles.stderr);
+    const { entries } = readDirectorySnapshot(Buffer.from(profiles.stdout));
+    assert.deepEqual(entries.map((entry: { path: string }) => entry.path), ['work.config.toml']);
+    assert.equal(entries[0].bytes.toString(), content);
+    assert.equal(fs.readFileSync(main, 'utf8'), content);
+    assert.equal(fs.readFileSync(profile, 'utf8'), content);
+  });
+
+  it('retains unsupported config with a value-free diagnostic and applies byte limits before filtering', () => {
+    const content = `custom = { secret = "DUMMY_PRIVATE_VALUE" }\n${codexRuntimeConfig()}`;
+    write('config.toml', content);
+    const result = capture('codex_config.toml');
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, content);
+    assert.equal(result.stderr, 'Codex runtime metadata filtering skipped; configuration retained unchanged.\n');
+    const source = discover('codex_config.toml');
+    if (source.status !== 'available') throw new Error('Expected synthetic source');
+    const filtered = codexRuntimeConfig();
+    write('config.toml', filtered);
+    const bounded = spawnSync(source.collector.command, [...source.collector.args!, '--max-bytes', String(Buffer.byteLength(filtered) - 1)], {
+      env: { HOME: homeDir, PATH: '' }, encoding: 'utf8',
+    });
+    assert.equal(bounded.status, 1);
+    assert.equal(bounded.stdout, '');
+    assert.include(bounded.stderr, 'bytes limit');
+    assert.equal(fs.readFileSync(path.join(root, 'config.toml'), 'utf8'), filtered);
+  });
+
   it('reports logical active-home aliases while collecting from canonical paths', () => {
     const active = path.join(homeDir, 'active codex');
     write('config.toml', 'synthetic alias config', active);
@@ -76,7 +115,7 @@ describe('Codex durable snapshots', () => {
     if (raw.status !== 'available' || recursive.status !== 'available') throw new Error('Expected synthetic alias sources');
     assert.equal(raw.source.path, path.join(alias, 'config.toml'));
     assert.equal(raw.source.root, alias);
-    assert.deepEqual(raw.collector.args, [collectorPath, active, 'file', 'config.toml']);
+    assert.deepEqual(raw.collector.args, [collectorPath, active, 'file', 'config.toml', '--filter-codex-runtime']);
     assert.equal(recursive.source.path, path.join(alias, 'rules'));
     assert.deepEqual(recursive.collector.args, [collectorPath, path.join(active, 'rules'), 'directory']);
   });

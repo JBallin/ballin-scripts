@@ -57,9 +57,10 @@ just to verify them.
 
 Consent covers later captures as files, symlink targets, and installed-tool
 metadata change. It does not certify future contents or require repeated review
-during unattended backups. Deliberately selected content remains intact without
-redaction, subject to the existing final-newline and empty-file normalization;
-snapshots do not preserve filesystem bytes and metadata exactly. Known
+during unattended backups. Deliberately selected content is not redacted. The
+Codex main configuration omits narrowly recognized runtime metadata as described
+below; other content retains the existing final-newline and empty-file normalization.
+Snapshots do not preserve filesystem bytes and metadata exactly. Known
 credential stores, authentication/session files, SSH private keys, and arbitrary
 home trees remain outside direct selection. Allowed sources may still contain
 credentials.
@@ -79,7 +80,7 @@ inspect editor files before enabling backup or sharing snapshots, check
 | VS Code and VS Code Insiders `settings.json`, `keybindings.json` | `vs_settings`, `vs_keybindings`, `vsI_settings`, `vsI_keybindings` | Preserve editor settings and keybindings. | Extension credentials, remote hosts, paths, command arguments, and arbitrary settings. | Sensitive; one local opt-in. |
 | `code --list-extensions`, `code-insiders --list-extensions` | `vs_extensions`, `vsI_extensions` | Record installed editor tooling. | Tool choices, employers or projects, and user preferences. | Inventory; default included. |
 | `~/.ballin-scripts/ballin.config.json` | `ballin_config` | Recover supported Ballin preferences. | Supported Ballin preferences. The backup destination, analytics setting and install ID, automatic-backup setting, sensitive-source consent, and custom settings are excluded. | Preferences; filtered export. |
-| Codex `AGENTS.md`, `AGENTS.override.md`, `config.toml`, named `<name>.config.toml`, and `hooks.json` | `codex_AGENTS.md`, `codex_AGENTS.override.md`, `codex_config.toml`, `codex_profiles.bundle.json`, `codex_hooks.json` | Preserve instructions, whole configuration/profile files, and executable hook definitions. | Arbitrary commands, MCP inputs, credentials, private paths, and embedded hook/project trust settings. | Sensitive; the same local opt-in. |
+| Codex `AGENTS.md`, `AGENTS.override.md`, `config.toml`, named `<name>.config.toml`, and `hooks.json` | `codex_AGENTS.md`, `codex_AGENTS.override.md`, `codex_config.toml`, `codex_profiles.bundle.json`, `codex_hooks.json` | Preserve instructions, configuration, profiles, and executable hook definitions; omit recognized runtime metadata only from the main config. | Arbitrary commands, MCP inputs, credentials, private paths, and embedded hook/project trust settings. | Sensitive; the same local opt-in. |
 | `~/.agents/skills/` | `codex_user_skills.bundle.json` | Preserve current shared personal skills recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
 | Codex `skills/`, `rules/`, and `agents/` | `codex_skills.bundle.json`, `codex_rules.bundle.json`, `codex_agents.bundle.json` | Preserve legacy Codex-home skills and personal rules/agents recursively. | Arbitrary instructions, executable files, binary assets, credentials, and private project information. | Sensitive; the same local opt-in. |
 | `~/.agents/plugins/marketplace.json` | `codex_marketplace.json` | Preserve the personal plugin marketplace definition. | Plugin references, private paths, URLs, and arbitrary manifest values. | Sensitive; the same local opt-in; referenced payloads excluded. |
@@ -112,13 +113,36 @@ A discovery failure for a selected Codex source stops the backup before staging;
 Ballin does not publish a partial capture. Absent or policy-excluded sources
 remain skipped.
 
-Whole configuration files preserve instructions, inline hooks, workflow
+Configuration snapshots preserve instructions, inline hooks, workflow
 preferences, and embedded project trust levels or hook approval hashes. Ballin
 does not filter those values, replay approvals, execute hooks, or automatically
 restore configuration. Review configuration before manually using a backup;
 manual restoration can carry forward saved trust settings. Standalone
 `hooks.json` preserves definitions only; referenced scripts, tools, MCP servers,
 and external files are not collected merely because they are referenced.
+
+Only `codex_config.toml` omits two recognized app-generated values from
+`mcp_servers.node_repl.env`: `BROWSER_USE_CODEX_APP_VERSION` and the `browser`
+member of the JSON string in `NODE_REPL_TRUSTED_SERVICES`. Filtering requires the
+standard installed ChatGPT/Codex app command, empty arguments, production build
+flavor, a numeric dotted version, and a browser service under that configuration's
+`CODEX_HOME/plugins/cache/openai-bundled/browser/<version>/scripts/browser-service.mjs`.
+App and plugin versions may differ. Other services, including `sky`, remain in
+the map. Models, reasoning effort, desktop preferences, migrations, trust, other
+MCP settings, and named profile files remain included.
+
+The filter recognizes ordinary TOML tables, dotted keys, strings, scalars, and
+arrays without rewriting unrelated content. Unsupported syntax, including inline
+tables, array tables, and dates, or ambiguous/malformed input retains the entire
+configuration with a value-free diagnostic. Unrecognized runtime layouts remain
+unchanged. This is a noise filter, not a secret scan. It never edits the live
+configuration or rewrites backup history; older snapshots can retain both values.
+
+When reusing the snapshot, install and sign in to the app separately and review
+its freshly generated configuration before merging saved settings. Automatic
+regeneration of the omitted entries after a restore has not been verified. Check
+that browser tools work with the installed plugin; do not rely on an old cached
+service path. See [new Mac guidance](new-mac.md#review-assistant-configuration).
 
 Recursive snapshots are versioned JSON archives of regular files, with sorted
 relative paths, readable UTF-8 lines or Base64 bytes, and an executable flag.

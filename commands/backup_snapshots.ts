@@ -575,7 +575,8 @@ const configurationSnapshot = (category: 'codex' | 'claude', name: string, relat
           command: process.execPath,
           args: recursive
             ? [path.join(__dirname, 'recursive_snapshot.ts'), sourcePath, directoryMode, ...(claude ? ['--reject-hardlinks'] : [])]
-            : [path.join(__dirname, 'recursive_snapshot.ts'), root, 'file', relative, ...(claude ? ['--reject-hardlinks'] : [])],
+            : [path.join(__dirname, 'recursive_snapshot.ts'), root, 'file', relative,
+              ...(name === 'codex_config.toml' ? ['--filter-codex-runtime'] : []), ...(claude ? ['--reject-hardlinks'] : [])],
           env: context.env,
         },
       };
