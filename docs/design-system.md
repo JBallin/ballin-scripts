@@ -357,8 +357,7 @@ development-environment maintenance so the developer can focus on building.
 
 Use Homebrew-style phase headings throughout setup and update: a blue
 `==>` marker without bold (`SGR 34`), followed by bold heading text in the
-terminal's default foreground (`SGR 1;39`), then a reset (`SGR 0`). Keep this
-color accent limited to phase markers.
+terminal's default foreground (`SGR 1;39`), then a reset (`SGR 0`).
 
 Use sparse bold emphasis for changed backup entries. Help uses bold for the
 `Usage:` label, command synopses, command and option table terms, and section
@@ -367,9 +366,27 @@ the synopsis on one line when it fits, then a short
 description; keep longer caveats after the essentials. Wrap narrow synopses at
 argument boundaries and keep wrapped examples copyable. Documentation-link labels
 keep their sparse `🔗 ` prefix and put the URL on the next line.
-Other output keeps the terminal's default foreground;
-do not add colors elsewhere or dim unchanged entries. Backup symbols and phase
-labels carry meaning even when emphasis is unavailable.
+Setup uses blue documentation URLs with neutral labels, blue interactive choice
+brackets with an uppercase bold default, and neutral question text. Error icons
+are red with neutral explanations; final “Setup complete.” is green. Help keeps
+plain optional-argument brackets, including nested syntax; prompt styling never
+applies to help synopses. Backup symbols and phase labels retain their meaning
+without color. Do not dim unchanged entries.
+
+Use these status meanings in setup prose:
+
+- ❌ The requested action failed; give a specific next action.
+- ⚠️ An actionable caution, including sensitive-data or credential exposure and
+  stopping backups on another installation.
+- ℹ️ Neutral context or disclosure.
+- 🔗 A documentation pointer with a neutral label and the URL on the next line.
+
+Separate a final error/recovery block from preceding output with one blank line.
+Keep the error and next action consecutive, without duplicate generic footers.
+Wrap affected prose at 80 visible columns, excluding ANSI codes. Keep complete
+command references and URLs intact, even when one is wider than the terminal.
+Retain meaningful internal headings such as Update
+preferences, Analytics and Backup preferences without labeling every gap.
 
 Ballin adds emphasis only on a TTY when `TERM` is not `dumb` and `NO_COLOR` is
 unset or empty. A nonempty `NO_COLOR` disables all Ballin emphasis, including
@@ -380,9 +397,8 @@ this policy. Child tools retain their own presentation behavior.
 Never add styling to config values, configuration read/write results, or backed-up
 file contents, even on a TTY. Human-facing config recovery diagnostics follow the
 prose convention below.
-Doctor reports, prompts, warnings, and errors keep plain labels and explanations;
-only complete command references use the convention below. The broader CLI
-wording and spacing audit is separate from this emphasis contract.
+Doctor status labels and unrelated Quickstart prefixes retain their existing
+contracts; these setup roles do not imply a global output normalization.
 
 In explanatory terminal prose, including help and recovery guidance, use sparse
 bold without backticks for complete command invocations on supported TTYs. For

@@ -315,7 +315,8 @@ analytics.runWithCommandAnalytics = () => reject('command analytics');
             assert.match(result.stdout, new RegExp(`^    ${command} {2,}`, 'mu'));
           });
           assert.include(result.stdout.replace(/\s+/gu, ' '), 'disconnect this Mac and disable automatic backups');
-          assert.include(result.stdout.replace(/\s+/gu, ' '), 'Repository backups include only locally approved sensitive sources; review them with `ballin setup`.');
+          assert.deepEqual(result.stdout.split('\n').slice(0, 2), ['Usage: ballin backup', '       ballin backup <command>']);
+          assert.include(result.stdout.replace(/\s+/gu, ' '), 'Repository backups include only locally approved sensitive sources; review them with `ballin backup setup`.');
         }
         assert.deepEqual(commandLog(), []);
         assert.isFalse(fs.existsSync(networkMarker));
