@@ -12,6 +12,9 @@ tart clone ghcr.io/cirruslabs/macos-golden-gate-vanilla ballin-test
 tart run ballin-test
 ```
 
+For guest admin access and automated console command entry, see the supplemental
+[gallery VM notes](../tools/output-gallery/README.md#guest-local-admin-access).
+
 ## Test installation
 
 Follow the [installation instructions](../README.md#installation) in the VM.

@@ -1,0 +1,10 @@
+{
+  "sourceRevision": "b801649dbcd878e2bd66fee50eba85446323df6b",
+  "executableHashes": {
+    "terminalStyle.ts": "9c5d67234463e01803c71aebbbd2dd7a4bf5567a9380397646b3515dd40709e0",
+    "help_format.ts": "c2c9b8944a113465a1bd6c0edd3d89b6bfa304e71049e24753983f595a0b71ee",
+    "doctor_report.ts": "b1839122fed6c98f15957ed19c5158bd65aa6cf663c2c4ee3ba927f67462abd3",
+    "diagnostics.ts": "2e475fceeaa4255201d48acbc5e207401bcc3d3c2c39dc43e5c182b4528f21a5",
+    "selection_label.cjs": "e1c24dddb2d68e6e34b0e3ed9e696f1c03957691527eb0620d2a9c4456cb2835"
+  }
+}
