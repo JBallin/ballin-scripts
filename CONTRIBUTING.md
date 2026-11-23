@@ -15,11 +15,10 @@
 
 ## Development
 
-Start new work by updating the installed checkout before creating your feature
-branch. `ballin self-update` fetches `origin/main`, checks out `main`, and merges
-`origin/main`. Run it before creating or switching to your feature branch;
-otherwise it switches away from that branch and may stash changes during
-recovery. Commit or stash any existing work first.
+For development, use the [main-tracking environment default](docs/installation.md#selecting-a-revision).
+Self-update refuses unsafe local work and confirms track changes. Preserve work
+before updating, then create your feature branch. It never automatically stashes
+or merges local work.
 
 ```shell
 $ cd ~/.ballin-scripts
@@ -32,7 +31,7 @@ $ npm test # Comprehensive local Node checks
 $ git push --set-upstream fork "$BRANCH_NAME"
 ```
 
-Open a pull request from your branch to `JBallin/ballin-scripts` and summarize
+[Open a pull request](https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/creating-a-pull-request) from your branch to `JBallin/ballin-scripts` and summarize
 the change and how you tested it.
 
 For faster focused testing and the additional hosted CI checks, see

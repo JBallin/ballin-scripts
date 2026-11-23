@@ -6,12 +6,13 @@ const github = path.join(__dirname, '..', '.github');
 const workflow = yaml.load(fs.readFileSync(path.join(github, 'workflows', 'ci.yml'), 'utf8'));
 
 describe('Ubuntu CI prerequisites', () => {
-  it('uses fixed Ubuntu 26.04 labels for every locally defined runner job', () => {
+  it('uses fixed runner labels, with macOS reserved for native tests', () => {
     for (const filename of fs.readdirSync(path.join(github, 'workflows'))) {
       const config = yaml.load(fs.readFileSync(path.join(github, 'workflows', filename), 'utf8'));
       for (const [name, job] of Object.entries(config.jobs)) {
         const runner = (job as { 'runs-on'?: string })['runs-on'];
-        if (runner !== undefined) assert.equal(runner, 'ubuntu-26.04', `${filename}: ${name}`);
+        if (runner !== undefined) assert.equal(runner,
+          filename === 'macos.yml' && name === 'native' ? 'macos-26' : 'ubuntu-26.04', `${filename}: ${name}`);
       }
     }
   });
@@ -45,5 +46,52 @@ describe('Ubuntu CI prerequisites', () => {
     assert.include(steps[report].run, 'for tool in bash jq /usr/bin/gnutimeout shellcheck zsh docker node npm; do');
     assert.include(steps[report].run, 'command -v "$tool"');
     assert.include(steps[report].run, '"$tool" --version');
+  });
+});
+
+describe('native macOS CI contract', () => {
+  const native = yaml.load(fs.readFileSync(path.join(github, 'workflows', 'macos.yml'), 'utf8'));
+  const job = native.jobs.native;
+
+  it('runs on every PR base, main pushes, and manual requests with read-only permissions', () => {
+    assert.deepEqual(native.on, { pull_request: null, push: { branches: ['main'] }, workflow_dispatch: null });
+    assert.deepEqual(native.permissions, { contents: 'read' });
+    assert.deepEqual(Object.keys(native.jobs), ['native']);
+    assert.equal(job['runs-on'], 'macos-26');
+    assert.equal(job['timeout-minutes'], 20);
+    assert.notProperty(job, 'if');
+    assert.notProperty(job, 'needs');
+    assert.notProperty(job, 'continue-on-error');
+  });
+
+  it('uses the approved action pins, Node version, and locked dependency install', () => {
+    const [checkout, setup] = job.steps;
+    assert.deepEqual(checkout, workflow.jobs.test.steps[0]);
+    assert.deepEqual(setup, workflow.jobs.test.steps.find((step: { name: string }) => step.name === 'Set up Node.js'));
+    assert.equal(job.steps[3].run, 'npm ci');
+  });
+
+  it('fails early if native platform, tools, or fixture group requirements are missing', () => {
+    const report = job.steps[2].run;
+    for (const expected of [
+      '${ImageOS:-unknown}', '${ImageVersion:-unknown}', 'sw_vers', 'uname -a', '\nid\n',
+      'node --version', 'npm --version', "assert.equal(process.platform, 'darwin')",
+      "assert.equal(process.arch, 'arm64')", 'process.getgroups().includes(80)',
+      'assert.notEqual(process.getgid(), 80',
+      'for tool in /usr/bin/plutil /bin/chmod /bin/stty /bin/bash /bin/zsh; do', 'test -x "$tool"',
+      '/bin/bash --version', '/bin/zsh --version', 'command -v zsh', '\nzsh --version\n',
+      '\nzsh -fc \'zmodload zsh/zpty && zmodload zsh/zselect && zmodload zsh/datetime\'',
+    ]) assert.include(report, expected);
+    assert.notInclude(report, 'sudo');
+  });
+
+  it('runs the focused suites serially without accepting pending or empty runs', () => {
+    assert.equal(job.steps.length, 5);
+    assert.equal(job.steps[4].run, 'npm run test:unit -- --no-parallel --forbid-pending --fail-zero '
+      + 'test/nvm.test.ts test/onboarding_plutil.test.ts test/prompt_input.test.ts');
+    for (const step of job.steps) {
+      assert.notProperty(step, 'if');
+      assert.notProperty(step, 'continue-on-error');
+    }
   });
 });

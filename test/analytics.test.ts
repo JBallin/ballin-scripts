@@ -45,7 +45,6 @@ type SenderOptions = {
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const packageJson = require('../package.json');
 const fixedInstallId = '826f9faa-9995-4f66-a01b-73b4f7aebdf1';
 const alternateInstallId = '123e4567-e89b-42d3-a456-426614174000';
 const fixedNow = new Date('2026-06-27T20:15:00.000Z');
@@ -132,7 +131,7 @@ const runConfigWithAnalytics = async (
   try {
     await runWithCommandAnalytics('ballin config', () => runConfigCli(args), {
       analyticsConfig: { enabled: 'true' },
-      appVersion: packageJson.version,
+      appVersion: 'development',
       env: {},
       installId: fixedInstallId,
       nowMs: () => 1000,
@@ -791,9 +790,9 @@ process.stdout.write(JSON.stringify({ result }));
     fs.writeFileSync(malformedPackagePath, '{not json', 'utf8');
     fs.writeFileSync(invalidVersionPackagePath, JSON.stringify({ version: 2 }), 'utf8');
 
-    assert.equal(loadAppVersion(malformedPackagePath), '0.0.0');
-    assert.equal(loadAppVersion(invalidVersionPackagePath), '0.0.0');
-    assert.equal(loadAppVersion(path.join(tempDir, 'missing-package.json')), '0.0.0');
+    assert.equal(loadAppVersion(malformedPackagePath), 'unknown');
+    assert.equal(loadAppVersion(invalidVersionPackagePath), 'unknown');
+    assert.equal(loadAppVersion(path.join(tempDir, 'missing-package.json')), 'unknown');
   });
 
   it('never throws when analytics config or sender behavior fails', async () => {
@@ -845,7 +844,7 @@ process.stdout.write(JSON.stringify({ result }));
       status: 'failure',
       durationBucket: '1-10s',
     });
-    assert.match(payload.appVersion, /^[0-9]+(?:\.[0-9]+){0,2}$/);
+    assert.equal(payload.appVersion, 'development');
     assert.match(payload.nodeMajor, /^[0-9]+$/);
     assert.match(payload.osVersion, /^[0-9]+(?:\.[0-9]+)?$|^unknown$/);
   });
@@ -1092,10 +1091,61 @@ process.stdout.write(JSON.stringify({ result }));
 
     assert.deepInclude(payloads[0], {
       command: 'ballin uninstall',
-      appVersion: packageJson.version,
+      appVersion: 'development',
       installId: fixedInstallId,
       status: 'success',
     });
+  });
+
+  for (const state of ['disabled', 'missing consent', 'missing ID', 'invalid ID', 'opt-out', 'CI', 'command suppression', 'unsupported command']) {
+    it(`does not resolve an uninstall version when no command event is eligible (${state})`, async () => {
+      setAnalyticsConfig(state === 'missing consent' ? {} : { enabled: state === 'disabled' ? 'false' : 'true' });
+      if (state !== 'missing ID') writeInstallId(state === 'invalid ID' ? 'invalid' : fixedInstallId);
+      const repoUpdate = require('../commands/repo_update.ts');
+      const original = repoUpdate.readAnalyticsVersion;
+      let lookups = 0, sends = 0, ran = false;
+      repoUpdate.readAnalyticsVersion = () => { lookups++; throw Error('Unexpected version lookup'); };
+      try {
+        await runWithCommandAnalytics(state === 'unsupported command' ? 'unsupported' : 'ballin uninstall', () => { ran = true; }, {
+          preserveLocalState: true, installIdPath: testInstallIdPath,
+          env: state === 'opt-out' ? { BALLIN_NO_ANALYTICS: '1' } : state === 'CI' ? { CI: 'true' }
+            : state === 'command suppression' ? { BALLIN_NO_COMMAND_ANALYTICS: '1' } : {},
+          sender: async () => { sends++; },
+        });
+        assert.isTrue(ran); assert.equal(lookups, 0); assert.equal(sends, 0);
+      } finally { repoUpdate.readAnalyticsVersion = original; }
+    });
+  }
+  it('captures an eligible uninstall version before state is removed, only once', async () => {
+    setAnalyticsConfig({ enabled: 'true' }); writeInstallId();
+    const repoUpdate = require('../commands/repo_update.ts');
+    const original = repoUpdate.readAnalyticsVersion;
+    const order: string[] = [], payloads: AnalyticsPayload[] = [];
+    repoUpdate.readAnalyticsVersion = () => { order.push('version'); return '1.0.0'; };
+    try {
+      await runWithCommandAnalytics('ballin uninstall', () => {
+        order.push('uninstall'); setAnalyticsConfig({ enabled: 'false' }); fs.rmSync(testInstallIdPath);
+      }, { preserveLocalState: true, installIdPath: testInstallIdPath, env: {}, osVersionOptions: fixedOsVersionOptions,
+        sender: async (payload: AnalyticsPayload) => { payloads.push(payload); } });
+      assert.deepEqual(order, ['version', 'uninstall']);
+      assert.lengthOf(payloads, 1); assert.equal(payloads[0].appVersion, '1.0.0');
+    } finally { repoUpdate.readAnalyticsVersion = original; }
+  });
+  it('resolves telemetry version after an update instead of retaining a process cache', async () => {
+    const repoUpdate = require('../commands/repo_update.ts');
+    const original = repoUpdate.readAnalyticsVersion;
+    const payloads: AnalyticsPayload[] = [];
+    let version = '1.0.0';
+    repoUpdate.readAnalyticsVersion = () => version;
+    try {
+      for (const next of ['1.1.0', 'development']) {
+        await runWithCommandAnalytics('ballin update', () => { version = next; }, {
+          analyticsConfig: { enabled: 'true' }, installId: fixedInstallId, env: {}, osVersionOptions: fixedOsVersionOptions,
+          sender: async (payload: AnalyticsPayload) => { payloads.push(payload); },
+        });
+      }
+      assert.deepEqual(payloads.map(payload => payload.appVersion), ['1.1.0', 'development']);
+    } finally { repoUpdate.readAnalyticsVersion = original; }
   });
 
   it('isolates command-level status from a stale process exitCode', async () => {

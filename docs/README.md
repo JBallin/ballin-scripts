@@ -24,6 +24,7 @@ For the project overview, see the [main README](../README.md).
 
 | Guide | Purpose |
 | --- | --- |
+| [Releasing Ballin](releasing.md) | Prepare and approve a versioned release. |
 | [Testing and coverage](testing.md) | Test isolation, coverage comparisons, and runtime and platform limits. |
 | [Installation testing](installation-testing.md) | Test Ballin installation in a macOS VM. |
 | [Code scanning](code-scanning.md) | Advanced CodeQL coverage, fork trust boundary, verification, and recovery. |

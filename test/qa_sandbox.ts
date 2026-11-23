@@ -95,7 +95,7 @@ const runQa = async (args = process.argv.slice(2)): Promise<number> => {
     return new Promise((resolve, reject) => {
       launchPending = true;
       recordSession(sandbox, [...groups], true);
-      const launched: ChildProcess = spawn(installer ? path.join(sandbox.source, quickstart ? 'quickstart.sh' : 'install.sh') : path.join(sandbox.bin, 'ballin'),
+      const launched: ChildProcess = spawn(installer ? (quickstart ? sandbox.quickstartEntry : path.join(sandbox.source, 'install.sh')) : path.join(sandbox.bin, 'ballin'),
         installer ? [] : commandArgs,
         { cwd: sandbox.home, env, stdio: 'inherit', detached: true });
       child = launched;
