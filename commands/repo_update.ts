@@ -80,6 +80,25 @@ const readIdentity = (root: string): Identity => {
     } catch (error) { if ((error as { status?: number }).status) throw error; return development; }
   } catch (error) { if ((error as { status?: number }).status) throw error; return { label: 'unknown revision', version: 'unknown' }; }
 };
+// Telemetry needs no checkout inspection unless a release receipt can apply.
+// Keep installer identity unchanged and fully validate every release claim.
+const readAnalyticsVersion = (root: string): string => {
+  try {
+    const sha = git(root, ['rev-parse', '--verify', 'HEAD']);
+    if (!shaPattern.test(sha)) return 'unknown';
+    try {
+      const receipt = readReceipt(root);
+      if (receipt.kind !== 'release' || receipt.sha !== sha) return 'development';
+    } catch (error) {
+      if ((error as { status?: number }).status) throw error;
+      return 'development';
+    }
+    return readIdentity(root).version;
+  } catch (error) {
+    if ((error as { status?: number }).status) throw error;
+    return 'unknown';
+  }
+};
 const assertSafeCheckout = (root: string): string => {
   const stat = fs.lstatSync(root);
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Installation directory must be a real directory.');
@@ -304,6 +323,6 @@ const runRepoUpdateCli = (): void => {
   }
 };
 if (require.main === module) runRepoUpdateCli();
-module.exports = { commandEnv, readIdentity, validateSelection, compareVersions, checkRuntime, assertSafeCheckout, needsConsent, applySelection, assertAppliedSelection, updateInstalledRepo, runRepoUpdateCli };
+module.exports = { commandEnv, readIdentity, readAnalyticsVersion, validateSelection, compareVersions, checkRuntime, assertSafeCheckout, needsConsent, applySelection, assertAppliedSelection, updateInstalledRepo, runRepoUpdateCli };
 
 export type { Identity };

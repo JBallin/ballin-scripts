@@ -142,7 +142,7 @@ const packageJsonPath = path.join(__dirname, '..', 'package.json');
 const defaultRepoDir = path.join(__dirname, '..');
 
 const loadAppVersion = (appPackageJsonPath = packageJsonPath): string => (
-  require('./repo_update.ts').readIdentity(path.dirname(appPackageJsonPath)).version
+  require('./repo_update.ts').readAnalyticsVersion(path.dirname(appPackageJsonPath))
 );
 
 const isAnalyticsConfig = (value: unknown): value is AnalyticsConfig => (
@@ -177,13 +177,17 @@ const readLocalInstallId = (installIdPath = installIdPathForRepo()): string | nu
   }
 };
 
-const preserveLocalAnalyticsState = (runtime: CommandAnalyticsRuntime): AnalyticsRuntime => {
+const preserveLocalAnalyticsState = (command: string, runtime: CommandAnalyticsRuntime): AnalyticsRuntime => {
   try {
+    const analyticsConfig = readAnalyticsConfig().analytics;
+    const installId = readLocalInstallId(runtime.installIdPath);
     return {
       ...runtime,
-      analyticsConfig: readAnalyticsConfig().analytics,
-      appVersion: loadAppVersion(),
-      installId: readLocalInstallId(runtime.installIdPath),
+      analyticsConfig,
+      appVersion: !commandAnalyticsDisabledByEnv(runtime.env ?? process.env)
+        && allowedCommands.has(command) && analyticsConfig.enabled === 'true' && installId
+        ? loadAppVersion() : runtime.appVersion,
+      installId,
     };
   } catch {
     return runtime;
@@ -563,7 +567,7 @@ const runWithCommandAnalytics = (
 ): Promise<void> => {
   const nowMs = runtime.nowMs ?? Date.now;
   const startedAt = nowMs();
-  const analyticsRuntime = runtime.preserveLocalState ? preserveLocalAnalyticsState(runtime) : runtime;
+  const analyticsRuntime = runtime.preserveLocalState ? preserveLocalAnalyticsState(command, runtime) : runtime;
   const previousRuntime = currentAnalyticsRuntime;
   const previousScope = currentBehavioralScope;
   const scope = { cancelled: false };
