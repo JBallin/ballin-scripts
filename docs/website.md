@@ -286,8 +286,10 @@ remain those of the intended public target.
 Configure `getballin.com`, DNS and HTTPS separately in Netlify after approval.
 The repository's origin/base configuration does not set up a Netlify site, team,
 plan or domain. The visible Netlify footer credit is included on every page;
-the documentation index links to project resources, including the shared Code of Conduct. The OSS application has been submitted,
-but acceptance and the separate-team arrangement remain external prerequisites.
+the documentation index links to project resources, including the shared Code of
+Conduct. A configured Netlify site and domain are required; complete the
+[Netlify OSS process](https://www.netlify.com/open-source/) and separate-team
+arrangement externally.
 When changing hosting, verify the configured origin/base against deployed pages,
 assets, gallery viewers, transcripts, fragments, sitemap and social metadata.
 Check certificate/redirect behavior and inspect sharing-platform previews after
@@ -299,12 +301,11 @@ Cloudflare Web Analytics is the selected website analytics service, separate fro
 Ballin's CLI analytics Worker and D1 data. The shared page template supports the
 Cloudflare beacon on home, documentation, gallery and image-viewer pages.
 
-**Setup to-do:** in Cloudflare Web Analytics, add the intended public hostname
-(`getballin.com`) and obtain its public site token. This account setup has not
-been performed. Put that beacon token in `site/analytics.json` in place of `null`
-in a reviewed change. It is a public identifier embedded in HTML, not an API
-credential; never put a Cloudflare API token or account secret there. Use manual
-beacon installation and avoid enabling automatic injection as well, which could
+In Cloudflare Web Analytics, add the intended public hostname (`getballin.com`)
+and obtain its public site token. Put that beacon token in `site/analytics.json`
+in place of `null` in a reviewed change. It is a public identifier embedded in
+HTML, not an API credential; never put a Cloudflare API token or account secret
+there. Use manual beacon installation and avoid enabling automatic injection as well, which could
 count visits twice. No CLI analytics credentials or data are reused.
 
 The committed null token disables collection. The Netlify production workflow passes
