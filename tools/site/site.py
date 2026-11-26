@@ -232,6 +232,10 @@ def pack(gallery, selection_path, output):
         if scenario.get('commandCaptionReviewed') is True:
             require(selected.get('command') == scenario.get('command') and bool(selected.get('command')),
                     'Captioned command requires matching explicit publication selection')
+        if scenario['kind'] == 'actual-vm' and 'command' in selected:
+            require(isinstance(scenario.get('command'), str) and bool(scenario['command'].strip())
+                    and selected['command'] == scenario['command'],
+                    'Recorded command requires matching capture provenance')
         folder = gallery / selected['scenario']
         require(not folder.is_symlink(), 'Symlink scenario directory')
         entry = {key: scenario[key] for key in ('category', 'kind', 'sourceRevision')}

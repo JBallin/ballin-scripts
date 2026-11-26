@@ -453,6 +453,64 @@ class BundleTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'disagree'):
                 site.pack(gallery, selection, root / 'mismatch.zip')
 
+    def test_pack_actual_command_requires_matching_capture_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            gallery = root / 'input'
+            folder = gallery / 'actual-update'
+            folder.mkdir(parents=True)
+            text = b'ACTUAL VM CAPTURE - synthetic test fixture only\n'
+            inputs = {'text.txt': text, 'output.json': site.json_bytes({'text': text.decode()}),
+                      'output-001.png': png(), 'raw.ansi': b'PRIVATE SENTINEL'}
+            for name, data in inputs.items():
+                (folder / name).write_bytes(data)
+            scenario = {'id': 'actual-update', 'category': 'Update', 'kind': 'actual-vm',
+                        'sourceRevision': 'a' * 40, 'command': 'ballin update',
+                        'files': {name: site.digest(data) for name, data in inputs.items()}}
+            selected = {'schema': 1, 'entries': [{
+                'scenario': 'actual-update', 'id': 'update', 'title': 'Synthetic actual fixture',
+                'edits': 'Synthetic fixture only.', 'approvedForPublication': True,
+                'readmeUpdate': True, 'command': 'ballin update'}]}
+            selection = root / 'selection.json'
+            selection.write_bytes(site.json_bytes(selected))
+            def save_scenario():
+                (gallery / 'manifest.json').write_bytes(site.json_bytes({'scenarios': [scenario]}))
+            save_scenario()
+            with contextlib.redirect_stdout(io.StringIO()):
+                site.pack(gallery, selection, root / 'matching.zip')
+            manifest, files = site.read_bundle((root / 'matching.zip').read_bytes())
+            self.assertEqual(manifest['entries'][0]['command'], 'ballin update')
+            self.assertIn('Recorded command', site.capture_details(manifest['entries'][0]))
+            self.assertEqual(files['gallery/update/text.txt'], text)
+            for value in ['ballin doctor', None, '', ' ', 42]:
+                scenario['command'] = value
+                save_scenario()
+                with self.subTest(command=value), self.assertRaisesRegex(ValueError, 'matching capture provenance'):
+                    site.pack(gallery, selection, root / 'refused.zip')
+                self.assertFalse((root / 'refused.zip').exists())
+            del scenario['command']
+            save_scenario()
+            with self.assertRaisesRegex(ValueError, 'matching capture provenance'):
+                site.pack(gallery, selection, root / 'missing.zip')
+            self.assertFalse((root / 'missing.zip').exists())
+            # Optional omission never publishes the retained private command.
+            scenario['command'] = 'PRIVATE SENTINEL'
+            save_scenario()
+            del selected['entries'][0]['command']
+            selection.write_bytes(site.json_bytes(selected))
+            with contextlib.redirect_stdout(io.StringIO()):
+                site.pack(gallery, selection, root / 'omitted.zip')
+            manifest, files = site.read_bundle((root / 'omitted.zip').read_bytes())
+            self.assertNotIn('command', manifest['entries'][0])
+            self.assertNotIn('PRIVATE SENTINEL', json.dumps(manifest) + repr(files))
+            self.assertNotIn('Recorded command', site.capture_details(manifest['entries'][0]))
+            self.assertEqual((folder / 'raw.ansi').read_bytes(), inputs['raw.ansi'])
+            self.assertEqual(json.loads((gallery / 'manifest.json').read_text())['scenarios'][0], scenario)
+            scenario['commandCaptionReviewed'] = True
+            save_scenario()
+            with self.assertRaisesRegex(ValueError, 'matching explicit'):
+                site.pack(gallery, selection, root / 'caption-omitted.zip')
+
 
 class PreviewHostTests(unittest.TestCase):
     def handler(self, hosts, port=8000):
