@@ -47,7 +47,18 @@ class Preview(http.server.SimpleHTTPRequestHandler):
             self.close_connection = True
             self.log_message('Client disconnected while sending response body')
 
+    def valid_host(self):
+        authorities = self.headers.get_all('Host', [])
+        if len(authorities) != 1:
+            return False
+        authority = re.fullmatch(r'(?:localhost|127\.0\.0\.1)(?::([0-9]{1,5}))?',
+                                 authorities[0], re.IGNORECASE | re.ASCII)
+        return authority is not None and int(authority[1] or '80') == self.server.server_port
+
     def do_GET(self):
+        if not self.valid_host():
+            self.send_error(403)
+            return
         if self.base and self.path in ('/', self.base):
             self.send_response(302)
             self.send_header('Location', self.base + '/')
@@ -58,6 +69,9 @@ class Preview(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_HEAD(self):
+        if not self.valid_host():
+            self.send_error(403)
+            return
         if selected_file(self.site, self.base, self.path) is None:
             self.send_error(404)
         else:

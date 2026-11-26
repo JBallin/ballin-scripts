@@ -454,6 +454,45 @@ class BundleTests(unittest.TestCase):
                 site.pack(gallery, selection, root / 'mismatch.zip')
 
 
+class PreviewHostTests(unittest.TestCase):
+    def handler(self, hosts, port=8000):
+        handler = object.__new__(preview.Preview)
+        handler.headers = http.client.HTTPMessage()
+        for host in hosts:
+            handler.headers.add_header('Host', host)
+        handler.server = mock.Mock(server_port=port)
+        return handler
+
+    def test_accepts_loopback_authority_with_matching_port(self):
+        for host in ['localhost:8000', 'LOCALHOST:8000', '127.0.0.1:8000']:
+            with self.subTest(host=host):
+                self.assertTrue(self.handler([host]).valid_host())
+        for host in ['localhost', '127.0.0.1', 'localhost:80']:
+            with self.subTest(host=host):
+                self.assertTrue(self.handler([host], port=80).valid_host())
+
+    def test_rejects_missing_duplicate_foreign_and_invalid_authorities(self):
+        for hosts in [[], ['localhost:8000', 'localhost:8000'], ['example.com:8000'],
+                      ['localhost'], ['localhost:8001'], ['127.0.0.1:80'], ['localhost:'],
+                      ['localhost:0'], ['localhost:65536'], ['localhost:abc'], ['localhost:8000/path']]:
+            with self.subTest(hosts=hosts):
+                self.assertFalse(self.handler(hosts).valid_host())
+
+    def test_get_and_head_reject_before_file_selection_or_redirect(self):
+        for method in ['do_GET', 'do_HEAD']:
+            for path in ['/', '/ballin-scripts', '/ballin-scripts/index.html']:
+                with self.subTest(method=method, path=path):
+                    handler = self.handler(['example.com:8000'])
+                    handler.path, handler.base = path, '/ballin-scripts'
+                    handler.send_error = mock.Mock()
+                    handler.send_response = mock.Mock()
+                    with mock.patch.object(preview, 'selected_file') as select:
+                        getattr(handler, method)()
+                    handler.send_error.assert_called_once_with(403)
+                    handler.send_response.assert_not_called()
+                    select.assert_not_called()
+
+
 class BuildTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
